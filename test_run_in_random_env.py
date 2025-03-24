@@ -29,6 +29,7 @@ for i in range(30):
     # Render the environment frame as an RGB array
     frame = env.render()
 
+
     # Display the frame using matplotlib
     ax.clear()  # Clear the previous frame
     ax.imshow(frame)

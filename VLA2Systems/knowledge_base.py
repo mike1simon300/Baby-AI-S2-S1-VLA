@@ -71,10 +71,17 @@ def find_connections(grid_data, rooms):
 
                 if len(adjacent_rooms) == 2:
                     room1, room2 = sorted(adjacent_rooms)
-                    door_info = {'type': cell.type, 'color': cell.color, 'position': (x, y)}
+                    if cell.is_locked:
+                        door_state = 'locked'
+                    elif cell.is_open:
+                        door_state = 'open'
+                    else:
+                        door_state = 'closed'
+                    door_info = {'type': cell.type, 'color': cell.color,
+                                 'position': (x, y),'state': door_state}
                     connections.append((room1, room2, door_info))
-
-    return connections
+    
+    return connections, room_map
 
 def build_knowledge_base(grid_data, rooms, connections):
     """Builds a knowledge base of objects organized by room and connections."""
@@ -87,7 +94,23 @@ def build_knowledge_base(grid_data, rooms, connections):
         knowledge_base["rooms"][room_id] = []
         for x, y in room:
             cell = grid_data[y][x]
-            if cell and cell.type not in ['wall', 'empty']:
+            if cell is None or cell.type in ['wall', 'empty']:
+                continue
+            elif cell.type == 'door':
+                if cell.is_locked:
+                    door_state = 'locked'
+                elif cell.is_open:
+                    door_state = 'open'
+                else:
+                    door_state = 'closed'
+
+                knowledge_base["rooms"][room_id].append({
+                    'type': cell.type,
+                    'color': cell.color,
+                    'position': (x, y),
+                    'state': door_state
+                })
+            else:
                 knowledge_base["rooms"][room_id].append({
                     'type': cell.type,
                     'color': cell.color,
@@ -110,13 +133,19 @@ def format_knowledge_base(knowledge_base):
         else:
             text_output.append(f"Room {room_id}:")
             for obj in objects:
-                text_output.append(f"  {obj['color']} {obj['type']} is at {obj['position']}")
+                if obj['type'] == 'door':
+                    text_output.append(
+                        f"  {obj['color']} {obj['type']} is at {obj['position']}"+
+                        f" and is currently {obj['state']}")
+                else:
+                    text_output.append(
+                        f"  {obj['color']} {obj['type']} is at {obj['position']}")
     if len(knowledge_base["connections"]) == 0:
         text_output.append("There is no Connections.")
     else:
         text_output.append("\nConnections:")
     for room1, room2, door in knowledge_base["connections"]:
-        text_output.append(f"Room {room1} connect to Room {room2} by {door['color']} {door['type']} at {door['position']}")
+        text_output.append(f"Room {room1} connect to Room {room2} by {door['color']} {door['type']} at {door['position']} which is currently {door['state']}")
 
     return "\n".join(text_output)
 
@@ -124,14 +153,14 @@ class KnowledgeBase:
     def __init__(self, env) -> None:
         self.env = env
         self.grid_data = extract_grid_data(self.env)
-        self.KB = self.build_KB(self.grid_data)
+        self.KB, self.room_map = self.build_KB(self.grid_data)
 
     def build_KB(self, grid_data):
         # Detect rooms
         rooms = detect_rooms(grid_data)
         # Find connections (doors) between rooms
-        connections = find_connections(grid_data, rooms)
-        return build_knowledge_base(grid_data, rooms, connections)
+        connections, room_map = find_connections(grid_data, rooms)
+        return build_knowledge_base(grid_data, rooms, connections), room_map
     
     def __str__(self) -> str:
         return format_knowledge_base(self.KB)

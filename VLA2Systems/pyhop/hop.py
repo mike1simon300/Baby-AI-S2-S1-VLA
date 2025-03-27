@@ -96,7 +96,7 @@ Pyhop provides the following classes and functions:
 from __future__ import print_function
 import copy
 
-from pyhop.helpers import (
+from VLA2Systems.pyhop.helpers import (
     print_goal, print_methods, print_operators, print_state)
 
 

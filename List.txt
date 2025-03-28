@@ -16,7 +16,7 @@ Capabilities or commands:
 - drop object (joined with go to) # Not done yet
 - drop object next to (joined with go to) # Not done yet
 
-- Go to object (search entire KB)(Capability): # Not done yet
+- Go to object (search entire KB)(Capability):
     example:
     Go to grey box:
     Plan:
@@ -44,5 +44,7 @@ List of environments:
 - BabyAI-PutNextLocal-v0
 - BabyAI-PickupDist-v0
 
+Boss levels:
 - BabyAI-FindObjS5-v0
 - BabyAI-KeyCorridor-v0
+- BabyAI-Synth-v0

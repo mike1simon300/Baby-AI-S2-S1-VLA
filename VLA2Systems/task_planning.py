@@ -215,31 +215,21 @@ class RobotPlanner:
 
             # Prepare the tasks to handle the door based on its state.
             if door_state == 'open':
-                _, robot_position = state.robot_location
-                dist = dist_manhatten(robot_position, position)
-                # print("MANHATEN DISTANCE", dist)
-                # print("STATE IS: ", state.robot_location)
-                # print("STATE IS: ", state.doors)
-                result = is_infront_of_door(self, state, position)
                 # print("is_infront_of_door: ", result)
-                if dist > 1:
-                    # print(f"ROBOT IS IN {robot_position} not infront of open door, going to go to door {door_color} {position} {door_state}")
-                    door_tasks = [('go_to_object', 'door', door_color, position)]
-                else:
+                if is_infront_of_door(self, state, position):
                     # print(f"ROBOT IS IN {robot_position} infront of open door, do nothing")
                     door_tasks = []
                     # print("AFTER SETTING door_tasks ", door_tasks)
-            elif door_state == 'closed':
-                _, robot_position = state.robot_location
-                dist = dist_manhatten(robot_position, position)
-                result = is_infront_of_door(self, state, position)
-                # print("is_infront_of_door: ", result)
-                if dist > 1:
-                    # print(f"ROBOT IS IN {robot_position} not infront of closed door, going to go to door {door_color} {position} {door_state} then open it")
-                    door_tasks = [('go_to_object', 'door', door_color, position), ('open', 'door', door_color)]
                 else:
+                    # print(f"ROBOT IS IN {robot_position} not infront of open door, going to go to door {door_color} {position} {door_state}")
+                    door_tasks = [('go_to_object', 'door', door_color, position)]
+            elif door_state == 'closed':
+                if is_infront_of_door(self, state, position):
                     # print(f"ROBOT IS IN {robot_position} infront of closed door, open door {door_color} {position} {door_state}")
                     door_tasks = [('open', 'door', door_color)]
+                else:
+                    # print(f"ROBOT IS IN {robot_position} not infront of closed door, going to go to door {door_color} {position} {door_state} then open it")
+                    door_tasks = [('go_to_object', 'door', door_color, position), ('open', 'door', door_color)]
             elif door_state == 'locked':
                 # For locked doors, we pick up the key first.
                 door_tasks = [('pick_up_object', 'key', door_color), 

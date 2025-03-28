@@ -22,14 +22,15 @@ class RobotPlanner:
             for obj in objects:
                 if obj['type'] == 'door':
                     state.room_objects[room].append(
-                        (obj['type'], obj['color'], 
-                         obj['position'], obj['state']))
+                        [obj['type'], obj['color'], 
+                         obj['position'], obj['state']])
                 else:
                     state.room_objects[room].append(
                         (obj['type'], obj['color'], obj['position']))
 
         for r1, r2, door in self.kb.KB['connections']:
-            state.doors[(r1, r2)] = (door['color'], door['position'], door['state'])
+            state.doors[(r1, r2)] = [door['color'], door['position'], door['state']]
+            # state.doors[(r2, r1)] = [door['color'], door['position'], door['state']]
 
         # Set the robot's starting location
         if start_location:
@@ -56,10 +57,12 @@ class RobotPlanner:
         return self.plan
 
     def declare(self):
-        declare_operators(self.go_to, self.pick_up)
+        declare_operators(self.go_to, self.pick_up, self.open)
         declare_methods('go_to_object', self.go_to_object)
         declare_methods('pick_up_object', self.pick_up_object)
-
+        # print("Operators: ", get_operators())
+        # print("Methods: ", get_methods())
+    # Operator
     def pick_up(self, state, obj_type, obj_color):
         # Case: Robot already holding an object
         if state.holding is not None:
@@ -92,9 +95,10 @@ class RobotPlanner:
                 return state
         # The we don't have the current object or rotation
         return False
-
-    def go_to(self, state, obj_type, obj_color):
-        current_room = self.current_room(state.robot_location)
+    # Operator
+    def go_to(self, state, obj_type, obj_color, current_room=None):
+        if current_room is None:
+            current_room = self.current_room(state.robot_location)
         for obj in state.room_objects[current_room]:
             if obj[0] == obj_type and obj[1] == obj_color:
 
@@ -114,45 +118,92 @@ class RobotPlanner:
                 state.robot_location = solution
                 return state
         return False
+    # Operator
+    def open(self, state, obj_type, obj_color):
+        current_room = self.current_room(state.robot_location)
+        print("ROBOT LOCATION INSIDE OPEN: ", state.robot_location)
+        surroundings = get_robot_surroundings(state.robot_location, 
+                               self.kb.grid_data, 
+                               state.room_objects[current_room])
+        for _, obj in surroundings:
+            if obj[0] == 'door':
+                # Look for the door that the robot is standing in front of.
+                if obj[3] == 'closed':
+                    index, _ = get_object_in_pos(obj[2], 
+                                                 state.room_objects[current_room])
+                    state.room_objects[current_room][index][3] = 'open'
+                    print("Going in and out open")
+                    return state
+        print("Variables: ", current_room, surroundings, state.robot_location)
+        print("Not going inside and returning False")
+        return False
 
-    # Method to plan how to reach an object in the same room
-    def go_to_object(self, state, obj_type, obj_color):
-        if self.go_to(state, obj_type, obj_color):
-            return [('go_to', obj_type, obj_color)]
+
+    # Helper
+    def unblock_object(self, state, obj_type, obj_color):
+        current_room = self.current_room(state.robot_location)
+        room_objects = state.room_objects[current_room]
+        objects_in_room = get_objects(obj_type, obj_color, room_objects)
+        for target_obj in objects_in_room:
+            if is_blocked_by_object(target_obj[2], self.kb.grid_data, room_objects,
+                                    current_room, self.kb.room_map):
+                nearbys = get_robot_surroundings((0, target_obj[2]), self.kb.grid_data, 
+                                    room_objects)
+                for _, other_object in nearbys:
+                    subplan = plan(state, [('pick_up_object', other_object[0], other_object[1])],
+                       get_operators(), get_methods(), verbose=self.verbose)
+                    if subplan:
+                        break
+                if subplan:
+                    return subplan + [('go_to', obj_type, obj_color)]
+        return False
+    # Helper
+    def object_not_in_room(self, state, obj_type, obj_color):
         current_room = self.current_room(state.robot_location)
         room_objects = state.room_objects[current_room]
         objects_in_room = get_objects(obj_type, obj_color, room_objects)
         # If no instance of the object is found in this room, we might consider exploring other rooms.
         if len(objects_in_room) == 0:
             # For now, return failure (or implement exploration)
-            return False
-        # print(objects_in_room)
-        for target_obj in objects_in_room:
-            # print(target_obj)
-            if is_blocked_by_object(target_obj[2], self.kb.grid_data, room_objects,
-                                    current_room, self.kb.room_map):
-                # print("is_blocked_by_object YES")
-                # nearbys = get_object_empty_nearbys(target_obj[2], self.kb.grid_data, 
-                #                                    room_objects, current_room, 
-                #                                    self.kb.room_map, True)
-                nearbys = get_robot_surroundings((0, target_obj[2]), self.kb.grid_data, 
-                                    room_objects)
-                # print(nearbys)
-                for _, other_object in nearbys:
-                    # print([('pick_up_object', other_object[0], other_object[1])])
-                    subplan = plan(state, [('pick_up_object', other_object[0], other_object[1])],
-                       get_operators(), get_methods(), verbose=self.verbose)
-                    # print("preformed sub-plan")
-                    # print(subplan)
-                    if subplan:
-                        break
-                if subplan:
-                    return subplan + [('go_to', obj_type, obj_color)]
-                
-                # print("Exited Loop")
-        # print("HERE")
+            return True
+        return False
+    
+    # Helper
+    def check_for_door(self, state, obj_type, obj_color):
+        # IF the robot is in another room, but infront of the door,
+        # and the door is open.
+        current_room = self.current_room(state.robot_location)
+        surroundings = get_robot_surroundings(state.robot_location, 
+                               self.kb.grid_data, 
+                               state.room_objects[current_room])
+        for _, obj in surroundings:
+            if obj[0] == 'door':
+                # Look for the door that the robot is standing in front of.
+                for (r1, r2), (door_color, position, door_state) in state.doors.items():
+                    if r1==current_room and position == obj[2]:
+                        if obj[3] == 'open':
+                            return self.go_to_object(state, obj_type, obj_color, r2)
+                        elif obj[3] == 'closed':
+                            # new_state = self.open(state, None, None)
+                            plans = [('open', obj_type, obj_color), ('go_to_object', obj_type, obj_color)]
+                            return plans
         return False
 
+    # Method to plan how to reach an object
+    def go_to_object(self, state, obj_type, obj_color, room=None):
+        if self.go_to(state, obj_type, obj_color, room):
+            return [('go_to', obj_type, obj_color)]
+        if self.object_not_in_room(state, obj_type, obj_color):
+            plan = self.check_for_door(state, obj_type, obj_color)
+            print(plan)
+            if plan:
+                print(f"going to return plan {plan}")
+                return plan
+        plan = self.unblock_object(state, obj_type, obj_color)
+        if plan:
+            return plan
+        return False
+    # Method to plan how to pick up object
     def pick_up_object(self, state, obj_type, obj_color):
         """
         Method to plan to pick up an object.
@@ -185,10 +236,8 @@ class RobotPlanner:
                 steps.append(f"Step {i}: Go to {action[2]} {action[1]}")
             elif action_type == 'pick_up' and len(action) > 2:
                 steps.append(f"Step {i}: Pick up {action[2]} {action[1]}")
-            elif action_type == 'toggle_door' and len(action) > 2:
-                steps.append(f"Step {i}: Open {action[2]} door")
-            elif action_type == 'pass_door' and len(action) > 3:
-                steps.append(f"Step {i}: Pass through {action[2]} door from Room {action[1]} to Room {action[3]}")
+            elif action_type == 'open' and len(action) > 0:
+                steps.append(f"Step {i}: Open door")
             else:
                 steps.append(f"Step {i}: Invalid action {action}")
 
@@ -215,15 +264,15 @@ def get_robot_surroundings(robot_location, grid_data, room_objects):
         # Checks if the position is occupied by another object in the room.
         occupied = (pos[0], pos[1]) in filled_locations
         if occupied:
-            obj = get_object_in_pos(pos, room_objects)
+            _, obj = get_object_in_pos(pos, room_objects)
             surroundings.append((rot, obj))
     return surroundings
 
 def get_object_in_pos(pos, room_objects):
-    for obj in room_objects:
+    for index, obj in enumerate(room_objects):
         if pos == obj[2]:
-            return obj
-    return None
+            return index, obj
+    return None, None
 
 def blocked_objects():
     pass
@@ -293,117 +342,3 @@ def dist_manhatten(pos1, pos2):
     y = pos1[1] - pos2[1]
     dist = x+y
     return dist
-
-
-# # Operators
-# def go_to(state, room, obj_pos):
-#     state.robot_location = (room, obj_pos)
-#     return state
-
-# def pick_up(state, obj_type, obj_color):
-#     current_room, _ = state.robot_location
-#     for obj in state.room_objects[current_room]:
-#         if obj[0] == obj_type and obj[1] == obj_color:
-#             state.holding = (obj_type, obj_color)
-#             state.room_objects[current_room].remove(obj)
-#             return state
-#     return False
-
-# def toggle_door(state, door_color):
-#     return state
-
-# def pass_door(state, door_color, current_room, next_room):
-#     if ((current_room, next_room) in state.doors and state.doors[(current_room, next_room)][0] == door_color):
-#         position = state.doors[(current_room, next_room)][1]
-#         state.robot_location = (next_room, position)
-#         return state
-#     return False
-
-# # declare_operators(go_to, pick_up, toggle_door, pass_door)
-
-# # Method: Goal Achievement
-# def achieve_goal(state, goal):
-#     subtasks = []
-
-#     for task in goal:
-#         action, args = task
-#         if action == 'pick':
-#             obj_type = args['type']
-#             obj_color = args['color']
-
-#             # Locate the object in any room
-#             obj_location = None
-#             for room, objects in state.room_objects.items():
-#                 for obj in objects:
-#                     if obj[0] == obj_type and obj[1] == obj_color:
-#                         obj_location = (room, obj[2])
-#                         break
-#                 if obj_location:
-#                     break
-
-#             if obj_location is None:
-#                 print(f"Object {obj_color} {obj_type} not found!")
-#                 return False
-
-#             current_room, _ = state.robot_location
-
-#             if current_room != obj_location[0]:
-#                 # Find door path to the object
-#                 path = find_path_to_room(state, current_room, obj_location[0])
-#                 subtasks.extend(path)
-
-#             # Move and pick up the object
-#             subtasks.append(('go_to', obj_location[0], obj_location[1]))
-#             subtasks.append(('pick_up', obj_type, obj_color))
-
-#     return subtasks
-
-# declare_methods('achieve_goal', achieve_goal)
-
-# # Helper: Find Path to Room
-# def find_path_to_room(state, start_room, target_room):
-#     path = []
-#     visited = set()
-
-#     def dfs(current_room):
-#         if current_room == target_room:
-#             return True
-
-#         visited.add(current_room)
-#         for (r1, r2), (door_color, position) in state.doors.items():
-#             if r1 == current_room and r2 not in visited:
-#                 path.append(('go_to', r1, position))
-#                 path.append(('toggle_door', door_color))
-#                 path.append(('pass_door', door_color, r1, r2))
-#                 if dfs(r2):
-#                     return True
-#                 path.pop()
-#                 path.pop()
-#                 path.pop()
-#         return False
-
-#     dfs(start_room)
-#     return path
-
-# # Example usage:
-# kb = {
-#     'rooms': {
-#         0: [{'type': 'door', 'color': 'red', 'position': (3, 2)}],
-#         1: [{'type': 'ball', 'color': 'green', 'position': (8, 5)}, {'type': 'door', 'color': 'red', 'position': (3, 2)}, {'type': 'door', 'color': 'grey', 'position': (1, 8)}],
-#         2: [{'type': 'key', 'color': 'grey', 'position': (1, 8)}, {'type': 'door', 'color': 'grey', 'position': (1, 8)}]
-#     },
-#     'connections': [
-#         (0, 1, {'type': 'door', 'color': 'red', 'position': (3, 2)}),
-#         (1, 2, {'type': 'door', 'color': 'grey', 'position': (1, 8)})
-#     ]
-# }
-
-# # Example: Random start or specific location
-# planner = RobotPlanner(kb, start_location=(0, (3, 2)))
-# goal = [('pick', {'type': 'ball', 'color': 'green'})]
-# plan = planner.plan(goal)
-
-# if plan:
-#     print(planner.__str__(plan))
-# else:
-#     print("No valid plan found.")

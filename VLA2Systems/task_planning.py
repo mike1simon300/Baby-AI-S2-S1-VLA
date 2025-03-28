@@ -30,7 +30,7 @@ class RobotPlanner:
 
         for r1, r2, door in self.kb.KB['connections']:
             state.doors[(r1, r2)] = [door['color'], door['position'], door['state']]
-            # state.doors[(r2, r1)] = [door['color'], door['position'], door['state']]
+            state.doors[(r2, r1)] = [door['color'], door['position'], door['state']]
 
         # Set the robot's starting location
         if start_location:
@@ -121,7 +121,7 @@ class RobotPlanner:
     # Operator
     def open(self, state, obj_type, obj_color):
         current_room = self.current_room(state.robot_location)
-        print("ROBOT LOCATION INSIDE OPEN: ", state.robot_location)
+        # print("ROBOT LOCATION INSIDE OPEN: ", state.robot_location)
         surroundings = get_robot_surroundings(state.robot_location, 
                                self.kb.grid_data, 
                                state.room_objects[current_room])
@@ -132,10 +132,17 @@ class RobotPlanner:
                     index, _ = get_object_in_pos(obj[2], 
                                                  state.room_objects[current_room])
                     state.room_objects[current_room][index][3] = 'open'
-                    print("Going in and out open")
+                    # print("Going in and out open")
                     return state
-        print("Variables: ", current_room, surroundings, state.robot_location)
-        print("Not going inside and returning False")
+                elif obj[3] == 'locked' and state.holding is not None \
+                    and state.holding[0] == 'key' and state.holding[1] == obj_color:
+                    index, _ = get_object_in_pos(obj[2], 
+                                                 state.room_objects[current_room])
+                    state.room_objects[current_room][index][3] = 'open'
+                    # print("Going in lock and opening")
+                    return state
+        # print("Variables: ", current_room, surroundings, state.robot_location)
+        # print("Not going inside and returning False")
         return False
 
 
@@ -170,34 +177,54 @@ class RobotPlanner:
     
     # Helper
     def check_for_door(self, state, obj_type, obj_color):
-        # IF the robot is in another room, but infront of the door,
-        # and the door is open.
         current_room = self.current_room(state.robot_location)
-        surroundings = get_robot_surroundings(state.robot_location, 
-                               self.kb.grid_data, 
-                               state.room_objects[current_room])
-        for _, obj in surroundings:
-            if obj[0] == 'door':
-                # Look for the door that the robot is standing in front of.
-                for (r1, r2), (door_color, position, door_state) in state.doors.items():
-                    if r1==current_room and position == obj[2]:
-                        if obj[3] == 'open':
-                            return self.go_to_object(state, obj_type, obj_color, r2)
-                        elif obj[3] == 'closed':
-                            # new_state = self.open(state, None, None)
-                            plans = [('open', obj_type, obj_color), ('go_to_object', obj_type, obj_color)]
-                            return plans
+        
+        # # Check if the robot is already near a door (using surroundings)
+        # surroundings = get_robot_surroundings(state.robot_location, 
+        #                                       self.kb.grid_data, 
+        #                                       state.room_objects[current_room])
+        # for _, obj in surroundings:
+        #     if obj[0] == 'door':
+        #         # Find the corresponding door info
+        #         for (r1, r2), (door_color, position, door_state) in state.doors.items():
+        #             if r1 == current_room and position == obj[2]:
+        #                 # Ensure the target object exists in the connected room
+        #                 if any(o[0] == obj_type and o[1] == obj_color for o in state.room_objects[r2]):
+        #                     tasks = []
+        #                     # Since the robot is already at the door, we don't need an extra go_to_object for the door.
+        #                     if obj[3] == 'open':
+        #                         tasks.append(('go_to_object', obj_type, obj_color, r2))
+        #                     elif obj[3] == 'closed':
+        #                         tasks.extend([('open', 'door', door_color), ('go_to_object', obj_type, obj_color, r2)])
+        #                     return tasks
+        
+        # Search through all doors connected to the current room.
+        for (r1, r2), (door_color, position, door_state) in state.doors.items():
+            if r1 == current_room:
+                # Check if the target object exists in the connected room.
+                if any(o[0] == obj_type and o[1] == obj_color for o in state.room_objects[r2]):
+                    tasks = [('go_to_object', 'door', door_color)]
+                    if door_state == 'open':
+                        tasks.append(('go_to_object', obj_type, obj_color, r2))
+                    elif door_state == 'closed':
+                        tasks.extend([('open', 'door', door_color), ('go_to_object', obj_type, obj_color, r2)])
+                    elif door_state == 'locked':
+                        tasks.pop(-1)  # pop going to door, and replace it with go to key.
+                        tasks.extend([('pick_up_object', 'key', door_color), # go to the key that open this door
+                                      ('go_to_object', 'door', door_color), # after picking the key go back to door
+                                      ('open', 'door', door_color), 
+                                      ('go_to_object', obj_type, obj_color, r2)])
+                    return tasks
         return False
-
     # Method to plan how to reach an object
     def go_to_object(self, state, obj_type, obj_color, room=None):
         if self.go_to(state, obj_type, obj_color, room):
             return [('go_to', obj_type, obj_color)]
         if self.object_not_in_room(state, obj_type, obj_color):
             plan = self.check_for_door(state, obj_type, obj_color)
-            print(plan)
+            # print(plan)
             if plan:
-                print(f"going to return plan {plan}")
+                # print(f"going to return plan {plan}")
                 return plan
         plan = self.unblock_object(state, obj_type, obj_color)
         if plan:
@@ -210,6 +237,7 @@ class RobotPlanner:
         If the robot is already near and facing the object, it just returns the pick_up action.
         Otherwise, it tries to plan a sequence to get to the object and then pick it up.
         """
+
         if self.pick_up(state, obj_type, obj_color):
             return [('pick_up', obj_type, obj_color)]
         

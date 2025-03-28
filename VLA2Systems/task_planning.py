@@ -30,7 +30,7 @@ class RobotPlanner:
 
         for r1, r2, door in self.kb.KB['connections']:
             state.doors[(r1, r2)] = [door['color'], door['position'], door['state']]
-            state.doors[(r2, r1)] = [door['color'], door['position'], door['state']]
+            # state.doors[(r2, r1)] = [door['color'], door['position'], door['state']]
 
         # Set the robot's starting location
         if start_location:
@@ -96,27 +96,29 @@ class RobotPlanner:
         # The we don't have the current object or rotation
         return False
     # Operator
-    def go_to(self, state, obj_type, obj_color, current_room=None):
+    def go_to(self, state, obj_type, obj_color="", current_room=None):
         if current_room is None:
             current_room = self.current_room(state.robot_location)
         for obj in state.room_objects[current_room]:
-            if obj[0] == obj_type and obj[1] == obj_color:
-
-                possible_robot_locations = \
-                    get_object_empty_nearbys(obj[2], self.kb.grid_data, 
-                                             state.room_objects[current_room], 
-                                             current_room, self.kb.room_map)
-                if len(possible_robot_locations) == 0:
-                    continue
-                # There is at least one solution:
-                # Get a random choice of a solution
-                solution = random.choice(possible_robot_locations)
-                # # Get the first choice
-                # solution = possible_robot_locations[0]
-                # # Check if a path to solution is valid
-                # Not Implemented yet (Path plan to possible_robot_location)
-                state.robot_location = solution
-                return state
+            if obj_color != "" and obj[1] != obj_color:
+                continue
+            elif obj[0] != obj_type:
+                continue
+            possible_robot_locations = \
+                get_object_empty_nearbys(obj[2], self.kb.grid_data, 
+                                            state.room_objects[current_room], 
+                                            current_room, self.kb.room_map)
+            if len(possible_robot_locations) == 0:
+                continue
+            # There is at least one solution:
+            # Get a random choice of a solution
+            solution = random.choice(possible_robot_locations)
+            # # Get the first choice
+            # solution = possible_robot_locations[0]
+            # # Check if a path to solution is valid
+            # Not Implemented yet (Path plan to possible_robot_location)
+            state.robot_location = solution
+            return state
         return False
     # Operator
     def open(self, state, obj_type, obj_color):
@@ -132,14 +134,20 @@ class RobotPlanner:
                     index, _ = get_object_in_pos(obj[2], 
                                                  state.room_objects[current_room])
                     state.room_objects[current_room][index][3] = 'open'
-                    # print("Going in and out open")
+                    door_location = state.room_objects[current_room][index][2]
+                    key, _ = get_door_in_pos(door_location, state)
+                    state.doors[key][2] = 'open'
+                    # print("Going in lock and opening state: ", state)
                     return state
                 elif obj[3] == 'locked' and state.holding is not None \
                     and state.holding[0] == 'key' and state.holding[1] == obj_color:
                     index, _ = get_object_in_pos(obj[2], 
                                                  state.room_objects[current_room])
                     state.room_objects[current_room][index][3] = 'open'
-                    # print("Going in lock and opening")
+                    door_location = state.room_objects[current_room][index][2]
+                    key, _ = get_door_in_pos(door_location, state)
+                    state.doors[key][3] = 'open'
+                    # print("Going in lock and opening state: ", state)
                     return state
         # print("Variables: ", current_room, surroundings, state.robot_location)
         # print("Not going inside and returning False")
@@ -174,11 +182,64 @@ class RobotPlanner:
             # For now, return failure (or implement exploration)
             return True
         return False
-    
+
+    def search_rooms(self, state, obj_type, obj_color):
+        current_room = self.current_room(state.robot_location)
+        # Start the recursive search with an empty visited set.
+        return self.search_rooms_for_object(state, current_room, obj_type, obj_color, visited=set())
+
+    def search_rooms_for_object(self, state, current_room, obj_type, obj_color, visited):
+        # Mark the current room as visited.
+        visited.add(current_room)
+        
+        # Iterate over all doors in the state.
+        for (r1, r2), (door_color, position, door_state) in state.doors.items():
+            # Check if current_room is one end of the door.
+            if current_room == r1:
+                neighbor = r2
+            elif current_room == r2:
+                neighbor = r1
+            else:
+                continue
+
+            if neighbor in visited:
+                continue
+
+            # Prepare the tasks to handle the door based on its state.
+            if door_state == 'open':
+                door_tasks = [('go_to_object', 'door', door_color)]
+            elif door_state == 'closed':
+                door_tasks = [('go_to_object', 'door', door_color), ('open', 'door', door_color)]
+            elif door_state == 'locked':
+                # For locked doors, we pick up the key first.
+                door_tasks = [('pick_up_object', 'key', door_color), 
+                            ('go_to_object', 'door', door_color), 
+                            ('open', 'door', door_color)]
+            else:
+                # If the door state is unknown, skip it.
+                continue
+
+            # Check if the target object exists in the neighbor room.
+            if any(o[0] == obj_type and o[1] == obj_color for o in state.room_objects[neighbor]):
+                # Return the plan: handle door then go to the object in neighbor.
+                return door_tasks + [('go_to_object', obj_type, obj_color, neighbor)]
+            
+            # Otherwise, try to find the object recursively in the neighbor room.
+            sub_tasks = self.search_rooms_for_object(state, neighbor, obj_type, obj_color, visited)
+            if sub_tasks:
+                # If a plan was found deeper in the graph, prepend the door tasks.
+                return door_tasks + sub_tasks
+
+        # If no connected room (or chain of rooms) contains the object, return False.
+        return False
+
     # Helper
     def check_for_door(self, state, obj_type, obj_color):
         current_room = self.current_room(state.robot_location)
-        
+                    # door_location = state.room_objects[current_room][index][3]
+                    # door_list = state.doors.get_values()
+                    # door = get_object_in_pos(door_location, door_list)
+
         # # Check if the robot is already near a door (using surroundings)
         # surroundings = get_robot_surroundings(state.robot_location, 
         #                                       self.kb.grid_data, 
@@ -221,7 +282,7 @@ class RobotPlanner:
         if self.go_to(state, obj_type, obj_color, room):
             return [('go_to', obj_type, obj_color)]
         if self.object_not_in_room(state, obj_type, obj_color):
-            plan = self.check_for_door(state, obj_type, obj_color)
+            plan = self.search_rooms(state, obj_type, obj_color)
             # print(plan)
             if plan:
                 # print(f"going to return plan {plan}")
@@ -300,6 +361,12 @@ def get_object_in_pos(pos, room_objects):
     for index, obj in enumerate(room_objects):
         if pos == obj[2]:
             return index, obj
+    return None, None
+
+def get_door_in_pos(pos, state):
+    for key, door in state.doors.items():
+        if pos == door[1]:
+            return key, door
     return None, None
 
 def blocked_objects():

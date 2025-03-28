@@ -1,0 +1,48 @@
+Capabilities or commands:
+
+- Go to object (seperate)
+- Pick up object (seperate)
+- Open Door (seperate)
+- drop object (seperate) # Not done yet
+- drop object next to (seperate) # Not done yet
+- Go to object (in a connecting room)(Capability)
+- unlock door (to a connecting room)(Capability)
+- unblock door (to a connecting room)(Capability)
+- unhold object to pickup another one (Capability) # Not done yet (Can be done by RL)
+
+- Go to object (seperate)
+- Pick up object (joined with go to) # Not done yet
+- Open Door (joined with go to) # Not done yet
+- drop object (joined with go to) # Not done yet
+- drop object next to (joined with go to) # Not done yet
+
+- Go to object (search entire KB)(Capability): # Not done yet
+    example:
+    Go to grey box:
+    Plan:
+    Step 1: go to yellow door
+    Step 2: go to green door
+    Step 3: go to blue door
+    Step 4: go to purple door
+    Step 5: go to grey box
+
+- Go to {color} {object} {location} # Don't Want This
+
+List of environments:
+
+- BabyAI-OneRoomS8-v0
+- BabyAI-ActionObjDoor-v0
+- MiniGrid-DoorKey-16x16-v0
+- BabyAI-BlockedUnlockPickup-v0
+- BabyAI-ActionObjDoor-v0
+- BabyAI-BlockedUnlockPickup-v0
+- BabyAI-UnlockToUnlock-v0
+- BabyAI-UnlockPickup-v0
+- BabyAI-Unlock-v0
+- BabyAI-PutNextS4N1-v0
+- BabyAI-PutNextS5N2Carrying-v0
+- BabyAI-PutNextLocal-v0
+- BabyAI-PickupDist-v0
+
+- BabyAI-FindObjS5-v0
+- BabyAI-KeyCorridor-v0

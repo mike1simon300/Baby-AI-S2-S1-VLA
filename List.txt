@@ -11,12 +11,12 @@ Capabilities or commands:
 - unhold object to pickup another one (Capability) # Not done yet (Can be done by RL)
 
 - Go to object (seperate)
-- Pick up object (joined with go to) # Not done yet
-- Open Door (joined with go to) # Not done yet
+- Pick up object (joined with go to) # Done
+- Open Door (joined with go to) # Done
 - drop object (joined with go to) # Not done yet
 - drop object next to (joined with go to) # Not done yet
 
-- Go to object (search entire KB)(Capability):
+- Go to object (search entire KB)(Capability):  # Done
     example:
     Go to grey box:
     Plan:

@@ -1,4 +1,5 @@
 import random
+from typing import List
 from VLA2Systems.pyhop.hop import State, Goal, declare_operators, declare_methods, plan, get_operators, get_methods
 from VLA2Systems.knowledge_base import KnowledgeBase
 from copy import deepcopy
@@ -56,17 +57,46 @@ class RobotPlanner:
         self.plan = plan(self.state, tasks, get_operators(), get_methods(), verbose=self.verbose)
         return self.plan
 
+    def plan_drop_next_to(self, obj_color, obj_type, 
+                          next_to_obj_color="", next_to_obj_type="", 
+                          next_to_obj_location=None):
+        """
+        Plan to go to an object and pick it up then go to the other object
+        and place it next to it.
+        Or if it already have the object, go to the other object and place it next to it.
+        """
+        tasks = [('drop_next_to_object', obj_type, obj_color, 
+                  next_to_obj_type, next_to_obj_color, next_to_obj_location)]
+        self.plan = plan(self.state, tasks, get_operators(), get_methods(), verbose=self.verbose)
+        if self.plan:
+            last_task = None
+            refined_plan: List = deepcopy(self.plan)
+            for index, task in enumerate(self.plan):
+                if task == last_task:
+                    refined_plan.pop(index)
+                last_task = task
+            self.plan = refined_plan
+        return self.plan
+
+
     def declare(self):
-        declare_operators(self.go_to, self.pick_up, self.open)
+        declare_operators(self.go_to, self.pick_up, self.open, self.drop, self.drop_next_to)
         declare_methods('go_to_object', self.go_to_object)
         declare_methods('pick_up_object', self.pick_up_object)
         declare_methods('open_door', self.open_door)
+        declare_methods('drop_next_to_object', self.drop_next_to_object)
+        
         # print("Operators: ", get_operators())
         # print("Methods: ", get_methods())
     # Operator
     def pick_up(self, state, obj_type, obj_color, obj_location=None, current_room=None):
         # Case: Robot already holding an object
+        # print(f"state is: {state.robot_location}")
+        if state.holding is not None and \
+            state.holding[0] == obj_type and state.holding[1] == obj_color:
+            return state
         # print(f"ENTERED NEW PICK UP with state robot location: {state.robot_location} holding {state.holding}")
+        # print(f"state.holding is: {state.holding}")
         if state.holding is not None:
             return False
         # print(f"state is: {state.robot_location}")
@@ -104,7 +134,7 @@ class RobotPlanner:
         # print("Could not perform pick_up")
         return False
     # Operator
-    def go_to(self, state, obj_type, obj_color="", obj_location=None, current_room=None):
+    def go_to(self, state, obj_type, obj_color="", obj_location=None, current_room=None, get_all=False):
         if current_room is None:
             current_room = self.current_room(state.robot_location)
         for obj in state.room_objects[current_room]:
@@ -121,6 +151,9 @@ class RobotPlanner:
                                             current_room, self.kb.room_map)
             if len(possible_robot_locations) == 0:
                 continue
+            # return all solutions
+            if get_all:
+                return possible_robot_locations
             # There is at least one solution:
             # Get a random choice of a solution
             solution = random.choice(possible_robot_locations)
@@ -167,6 +200,117 @@ class RobotPlanner:
         # print("Not going inside and returning False")
         return False
 
+    # Operator
+    def drop(self, state, obj_type="", obj_color="", obj_location=None, current_room=None):
+        if not state.holding:
+            return False
+        if obj_type == "":
+            obj_type = state.holding[0]
+        if obj_color == "":
+            obj_color = state.holding[1]
+        if not (state.holding[0] == obj_type and state.holding[1] == obj_color):
+            return False
+        if current_room is None:
+            current_room = self.current_room(state.robot_location)
+        # Drop next to the robot.
+        possible_drop_locations = \
+            get_object_empty_nearbys(state.robot_location[1], self.kb.grid_data, 
+                                        state.room_objects[current_room], 
+                                        current_room, self.kb.room_map)
+        if len(possible_drop_locations) == 0:
+            return False
+        # There is at least one solution:
+        # Get a random choice of a solution
+        solution = random.choice(possible_drop_locations)
+        # # Get the first choice
+        # solution = possible_robot_locations[0]
+        state.robot_location[0] = solution[0]
+        state.room_objects[current_room].append(
+                        (obj_type, obj_color, solution[1]))
+        state.holding = None
+        return state
+
+    # Operator
+    def drop_next_to(self, state, obj_type="", obj_color="", 
+                     other_obj_type="", other_obj_color="", other_obj_location=None, 
+                     current_room=None):
+        # print("JUST WENT IN drop_next_to")
+        if not state.holding or other_obj_type == "":
+            return False
+        if obj_type == "":
+            obj_type = state.holding[0]
+        if obj_color == "":
+            obj_color = state.holding[1]
+        if other_obj_color == "":
+            other_obj_color = obj_color
+        if not (state.holding[0] == obj_type and state.holding[1] == obj_color):
+            return False
+        if current_room is None:
+            current_room = self.current_room(state.robot_location)
+        # print("COMPLETED INITIAL TEST OF drop_next_to")
+        # print("TESTING GO to other object")
+        # GO to other object:
+        self.go_to(state, other_obj_type, other_obj_color, other_obj_location, current_room)
+        # print(f"COMPLETED GO to other object, robot location is: {state.robot_location}")
+        if other_obj_location is None:
+            surroundings = get_robot_surroundings(state.robot_location,
+                                            self.kb.grid_data,
+                                            state.room_objects[current_room])
+            # print("get_robot_surroundings", surroundings)
+            # No objects nearby the robot (go to failed)
+            if len(surroundings) == 0:
+                return False
+            for _, obj in surroundings:
+                # Check if one of the nearby objects is the object we are searching for,
+                # and the robot is now facing it. 
+                if other_obj_type == obj[0] and other_obj_color == obj[1]:
+                    other_obj_location = obj[2]
+        # Didn't find the correct object (go to also failed)
+        if other_obj_location is None:
+            return False
+        # print(f"COMPLETED other_obj_location is {other_obj_location}")
+        
+        # Drop object next to the other object.
+        possible_drop_locations = \
+            get_object_empty_nearbys(other_obj_location, self.kb.grid_data, 
+                                        state.room_objects[current_room], 
+                                        current_room, self.kb.room_map)
+        # print(f"possible_drop_locations {get_object_empty_nearbys}")
+        if len(possible_drop_locations) == 0:
+            return False
+        robot_object_locations = []
+        # print("COMPLETED possible_drop_locations")
+
+        for _, drop_location in possible_drop_locations:
+            # check if the robot can go to one of these empty location:
+            test_state = deepcopy(state)
+            test_state.room_objects[current_room].append(
+                    ("drop_point", "test", drop_location))
+            robot_possible_locations = self.go_to(test_state, "drop_point", 
+                                                    "test", drop_location, 
+                                                    current_room, get_all=True)
+            if robot_possible_locations is False:
+                continue
+            
+            for robot_location in robot_possible_locations:
+                if robot_location[1] == other_obj_location:
+                    continue
+                else:
+                    robot_object_locations.append((robot_location, drop_location))
+        if len(robot_object_locations) == 0:
+            return False
+        # print("COMPLETED robot_object_locations")
+        # There is at least one solution:
+        # Get a random choice of a solution
+        robot_location, drop_location = random.choice(robot_object_locations)
+        # # Get the first choice
+        # solution = possible_robot_locations[0]
+        state.robot_location = robot_location
+        state.room_objects[current_room].append(
+                        (obj_type, obj_color, drop_location))
+        state.holding = None
+        return state
+
 
     # Helper
     def unblock_object(self, state, obj_type, obj_color):
@@ -187,21 +331,28 @@ class RobotPlanner:
                     return subplan + [('go_to', obj_type, obj_color)]
         return False
     # Helper
-    def object_not_in_room(self, state, obj_type, obj_color, obj_location=None):
-        current_room = self.current_room(state.robot_location)
+    def object_not_in_room(self, state, obj_type, obj_color, 
+                           obj_location=None, current_room=None):
+        if current_room is None:
+            current_room = self.current_room(state.robot_location)
         room_objects = state.room_objects[current_room]
         objects_in_room = get_objects(obj_type, obj_color, room_objects)
+        # print(f"objects_in_room {objects_in_room}")
         # If no instance of the object is found in this room, we might consider exploring other rooms.
         if obj_location is None and len(objects_in_room) == 0:
             # For now, return failure (or implement exploration)
             return True
+        elif obj_location is None:
+            return False
+        # print(f"obj_location {obj_location}")
         for obj in objects_in_room:
             if obj[2] == obj_location:
                 return False
         return True
 
-    def search_rooms(self, state, obj_type, obj_color, object_location, action):
-        current_room = self.current_room(state.robot_location)
+    def search_rooms(self, state, obj_type, obj_color, object_location, current_room, action):
+        if current_room is None:
+            current_room = self.current_room(state.robot_location)
         # Start the recursive search with an empty visited set.
         return self.search_rooms_for_object(state, current_room, obj_type, obj_color, 
                                             object_location, action, visited=set())
@@ -243,8 +394,29 @@ class RobotPlanner:
                     # print(f"ROBOT IS IN {robot_position} not infront of closed door, going to go to door {door_color} {position} {door_state} then open it")
                     door_tasks = [('open_door', 'door', door_color, position)]
             elif door_state == 'locked':
+                # ! Multiple options 
+                # ! FIRST (let the RL figure how to drop and pick up)
+                if state.holding and state.holding[0] == 'key' and state.holding[1] == door_color:
+                        door_tasks = [('open_door', 'door', door_color, position)]
+                else:
+                    door_tasks = [('pick_up_object', 'key', door_color, None), 
+                                  ('open_door', 'door', door_color, position)]
+                # ! SECOND (manually tell a sub-step of drop and pick up)
+                # if state.holding:
+                #     if state.holding[0] == 'key' and state.holding[1] == door_color:
+                #         door_tasks = [('open_door', 'door', door_color, position)]
+                #     else:
+                #         # ! here we want to add to drop what it is holding 
+                #         # ! and then pick up the key.
+                #         door_tasks = [('drop_next_to', state.holding[0], state.holding[1], 
+                #                        'key', door_color, position), 
+                #                       ('pick_up_object', 'key', door_color, None), 
+                #                       ('open_door', 'door', door_color, position)]
+                # else:
+                #     door_tasks = [('pick_up_object', 'key', door_color, None), 
+                #                   ('open_door', 'door', door_color, position)]
                 # For locked doors, we pick up the key first.
-                door_tasks = [('pick_up_object', 'key', door_color, position), 
+                door_tasks = [('pick_up_object', 'key', door_color, None), 
                             ('open_door', 'door', door_color, position)]
             else:
                 # If the door state is unknown, skip it.
@@ -278,15 +450,36 @@ class RobotPlanner:
         # If no connected room (or chain of rooms) contains the object, return False.
         return False
 
-    def lookup_ulternative(self, state, obj_type, obj_color, obj_location, action):
+    def lookup_ulternative(self, state, obj_type, obj_color, obj_location, room, action):
         # print("FAILED DIRECTLY GOTO, gonna try with searching for the object")
-        if self.object_not_in_room(state, obj_type, obj_color, obj_location):
+        # print(f"object_not_in_room \n {state.room_objects} \n {obj_type} {obj_color} {obj_location} {room}")
+        object_is_not_in_the_room = self.object_not_in_room(
+            state, obj_type, obj_color, obj_location, room)
+        # print(f"object_is_not_in_the_room ", object_is_not_in_the_room)
+        if self.object_not_in_room(state, obj_type, obj_color, obj_location, room):
             # print("GOING IN search_rooms")
-            plan = self.search_rooms(state, obj_type, obj_color, obj_location, action)
+            plan = self.search_rooms(state, obj_type, obj_color, obj_location, room, action)
             # print(plan)
             if plan:
                 # print(f"going to return plan {plan}")
                 return plan
+        # This means that the object is in the room, but there is something wrong
+        # This could be that the robot is currently holding another object.
+        elif action == 'pick_up_object' and state.holding:
+            # ! Multiple options 
+            # ! FIRST (let the RL figure how to drop and pick up)
+            if obj_location is None:
+                objects_in_room = get_objects(obj_type, obj_color, 
+                                            state.room_objects[room])
+                object = random.choice(objects_in_room)
+                new_object = (state.holding[0], state.holding[1], object[2])
+                state.holding = (object[0], object[1])
+                state.room_objects[room].remove(object)
+                state.room_objects[room].append(new_object)
+                return [('pick_up', obj_type, obj_color, obj_location, room)]
+                                          
+            # ! SECOND (manually tell a sub-step of drop and pick up)
+            # ! not implemented
         # print("FAILED searching for the object")
         plan = self.unblock_object(state, obj_type, obj_color)
         if plan:
@@ -298,7 +491,7 @@ class RobotPlanner:
         test_state = deepcopy(state)
         if self.go_to(test_state, obj_type, obj_color, obj_location, room):
             return [('go_to', obj_type, obj_color, obj_location, room)]
-        return self.lookup_ulternative(state, obj_type, obj_color, obj_location, 'go_to_object')
+        return self.lookup_ulternative(state, obj_type, obj_color, obj_location, room, 'go_to_object')
         # if result:
         #     return state
         
@@ -318,16 +511,18 @@ class RobotPlanner:
     
     # TODO: Change to add position
     # Method to plan how to pick up object
-    def pick_up_object(self, state, obj_type, obj_color, obj_location=None):
+    def pick_up_object(self, state, obj_type, obj_color, obj_location=None, current_room=None):
         """
         Method to plan to pick up an object.
         If the robot is already near and facing the object, it just returns the pick_up action.
         Otherwise, it tries to plan a sequence to get to the object and then pick it up.
         """
         test_state = deepcopy(state)
-        if self.pick_up(test_state, obj_type, obj_color):
-            return [('pick_up', obj_type, obj_color)]
-        return self.lookup_ulternative(state, obj_type, obj_color, obj_location, 'pick_up_object')
+        # print("GOING TO TEST PICK UP")
+        if self.pick_up(test_state, obj_type, obj_color, obj_location, current_room):
+            return [('pick_up', obj_type, obj_color, obj_location, current_room)]
+        # print("GOING TO LOOK FOR ULTERNATIVES")
+        return self.lookup_ulternative(state, obj_type, obj_color, obj_location, current_room, 'pick_up_object')
         # Otherwise, try to plan a path to reach the object first.
         # TODO: Change to add position
         subplan = plan(state, [('go_to_object', obj_type, obj_color)],
@@ -339,6 +534,45 @@ class RobotPlanner:
         # If no plan to reach the object is found, the task fails.
         return False
 
+    def drop_next_to_object(self, state, obj_type, obj_color="",
+                            other_obj_type="", other_obj_color="", other_obj_location="", room=None):
+        # print(f"JUST ENTERED drop_next_to_object with other_obj_type {other_obj_type}")
+        if other_obj_type == "":
+            return False
+        tasks = []
+        # print(f"state.holding is {state.holding}")
+        if state.holding is None:
+            tasks.append(('pick_up_object', obj_type, obj_color))
+        elif state.holding[0] != obj_type or (state.holding[1] != obj_color and obj_color != ""):
+            return [('pick_up_object', obj_type, obj_color),
+                    ('drop_next_to_object', obj_type, obj_color, 
+                          other_obj_type, other_obj_color, other_obj_location, room)]
+        # print(f"tasks {tasks}")
+        # print(f"state.holding is {state.holding}")
+        test_state = deepcopy(state)
+        if self.drop_next_to(test_state, obj_type, obj_color, 
+                             other_obj_type, other_obj_color, other_obj_location, room):
+            tasks.append(('drop_next_to', obj_type, obj_color, 
+                          other_obj_type, other_obj_color, other_obj_location, room))
+            return tasks
+        # If it fails the other object might be in another room.
+        # Find the other object (by using the lookup_ulternative to go to the other object) 
+        plan = self.lookup_ulternative(state, other_obj_type, other_obj_color, 
+                                       other_obj_location, room, 'go_to_object')
+        # If it was able to go the other object
+        if plan:
+            # remove the last task (which will be go to other object) and replace it with
+            # drop object next to other object but using the same room as the last task.
+            last_task = plan.pop(-1)
+            other_obj_location = last_task[3]
+            other_obj_room = last_task[4]
+            # print(f"last_task {last_task}")
+            tasks.extend(plan)
+            tasks.append(('drop_next_to_object', obj_type, obj_color, 
+                          other_obj_type, other_obj_color, other_obj_location, other_obj_room))
+            return tasks
+        return False
+
     def open_door(self, state, obj_type, obj_color="", obj_location=None, room=None):
         test_state = deepcopy(state)
         # print("CHECKING IF OPEN IS VALID")
@@ -346,7 +580,7 @@ class RobotPlanner:
             return [('open', obj_type, obj_color, obj_location, room)]
         # print(f"state is: {state.robot_location} doors {state.doors} test_state is: {test_state.robot_location} doors {test_state.doors}")
         # print("WAS NOT ABLE TO GO TO DOOR AND OPEN IT")
-        return self.lookup_ulternative(state, obj_type, obj_color, obj_location, 'open_door')
+        return self.lookup_ulternative(state, obj_type, obj_color, obj_location, room, 'open_door')
 
     def __str__(self):
         plan = self.plan
@@ -363,6 +597,8 @@ class RobotPlanner:
                 steps.append(f"Step {i}: Pick up {action[2]} {action[1]}")
             elif action_type == 'open' and len(action) > 0:
                 steps.append(f"Step {i}: Open {action[2]} {action[1]}")
+            elif action_type == 'drop_next_to' and len(action) > 0:
+                steps.append(f"Step {i}: Drop {action[2]} {action[1]} next to {action[4]} {action[3]}")
             else:
                 steps.append(f"Step {i}: Invalid action {action}")
 

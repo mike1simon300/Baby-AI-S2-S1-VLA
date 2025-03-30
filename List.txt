@@ -27,7 +27,7 @@ Capabilities or commands:
     Step 5: go to grey box
 
 - Go to {color} {object} {location} # Don't Want This
-
+    Where {location} is (in front, behind, on the right, on the left)
 List of environments:
 
 - BabyAI-OneRoomS8-v0
@@ -35,7 +35,7 @@ List of environments:
 - MiniGrid-DoorKey-16x16-v0
 - BabyAI-BlockedUnlockPickup-v0
 - BabyAI-ActionObjDoor-v0
-- BabyAI-BlockedUnlockPickup-v0
+- BabyAI-BlockedUnlockPickup-v0  # not used
 - BabyAI-UnlockToUnlock-v0
 - BabyAI-UnlockPickup-v0
 - BabyAI-Unlock-v0

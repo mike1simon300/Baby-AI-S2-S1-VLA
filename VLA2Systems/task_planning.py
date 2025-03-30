@@ -47,6 +47,14 @@ class RobotPlanner:
     def plan_go_to(self, obj_color, obj_type="", obj_location=None):
         tasks = [('go_to_object', obj_type, obj_color, obj_location)]
         self.plan = plan(self.state, tasks, get_operators(), get_methods(), verbose=self.verbose)
+        if self.plan:
+            last_task = None
+            refined_plan: List = deepcopy(self.plan)
+            for index, task in enumerate(self.plan):
+                if task == last_task:
+                    refined_plan.pop(index)
+                last_task = task
+            self.plan = refined_plan
         return self.plan
 
     def plan_pick_up(self, obj_color, obj_type, obj_location=None):
@@ -55,6 +63,14 @@ class RobotPlanner:
         """
         tasks = [('pick_up_object', obj_type, obj_color, obj_location)]
         self.plan = plan(self.state, tasks, get_operators(), get_methods(), verbose=self.verbose)
+        if self.plan:
+            last_task = None
+            refined_plan: List = deepcopy(self.plan)
+            for index, task in enumerate(self.plan):
+                if task == last_task:
+                    refined_plan.pop(index)
+                last_task = task
+            self.plan = refined_plan
         return self.plan
 
     def plan_drop_next_to(self, obj_color, obj_type, 
@@ -250,7 +266,9 @@ class RobotPlanner:
         # print("COMPLETED INITIAL TEST OF drop_next_to")
         # print("TESTING GO to other object")
         # GO to other object:
+        # print(state.robot_location)
         self.go_to(state, other_obj_type, other_obj_color, other_obj_location, current_room)
+        # print(state.robot_location)
         # print(f"COMPLETED GO to other object, robot location is: {state.robot_location}")
         if other_obj_location is None:
             surroundings = get_robot_surroundings(state.robot_location,
@@ -571,6 +589,11 @@ class RobotPlanner:
             tasks.append(('drop_next_to_object', obj_type, obj_color, 
                           other_obj_type, other_obj_color, other_obj_location, other_obj_room))
             return tasks
+        if len(tasks) == 1 and tasks[0][0] == 'pick_up_object':
+            return [('pick_up_object', obj_type, obj_color),
+                    ('drop_next_to_object', obj_type, obj_color, 
+                          other_obj_type, other_obj_color, other_obj_location, room)]
+
         return False
 
     def open_door(self, state, obj_type, obj_color="", obj_location=None, room=None):
@@ -695,7 +718,9 @@ def get_object_empty_nearbys(position, grid_data,
             pos[1] >= len(grid_data):
             continue
         # Check if cell is not a wall
-        elif grid_data[pos[1]][pos[0]] and grid_data[pos[1]][pos[0]].type == 'wall':
+        elif grid_data[pos[1]][pos[0]] and (
+            grid_data[pos[1]][pos[0]].type == 'wall' or 
+            grid_data[pos[1]][pos[0]].type == 'door'):
             continue
         # check if the empty space is in another room (if it's a door)
         elif room_map[pos] != current_room:

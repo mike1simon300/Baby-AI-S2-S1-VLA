@@ -44,8 +44,21 @@ class RobotPlanner:
         room_id = self.kb.room_map[pos]
         return room_id
 
-    def plan_go_to(self, obj_color, obj_type="", obj_location=None):
+    def plan_go_to(self, obj_color, obj_type, obj_location=None):
         tasks = [('go_to_object', obj_type, obj_color, obj_location)]
+        self.plan = plan(self.state, tasks, get_operators(), get_methods(), verbose=self.verbose)
+        if self.plan:
+            last_task = None
+            refined_plan: List = deepcopy(self.plan)
+            for index, task in enumerate(self.plan):
+                if task == last_task:
+                    refined_plan.pop(index)
+                last_task = task
+            self.plan = refined_plan
+        return self.plan
+
+    def plan_open_door(self, obj_color, obj_location=None):
+        tasks = [('open_door', "door", obj_color, obj_location)]
         self.plan = plan(self.state, tasks, get_operators(), get_methods(), verbose=self.verbose)
         if self.plan:
             last_task = None
@@ -105,11 +118,12 @@ class RobotPlanner:
         # print("Operators: ", get_operators())
         # print("Methods: ", get_methods())
     # Operator
-    def pick_up(self, state, obj_type, obj_color, obj_location=None, current_room=None):
+    def pick_up(self, state, obj_type, obj_color="", obj_location=None, current_room=None):
         # Case: Robot already holding an object
         # print(f"state is: {state.robot_location}")
         if state.holding is not None and \
-            state.holding[0] == obj_type and state.holding[1] == obj_color:
+            state.holding[0] == obj_type and \
+                (state.holding[1] == obj_color or obj_color == ""):
             return state
         # print(f"ENTERED NEW PICK UP with state robot location: {state.robot_location} holding {state.holding}")
         # print(f"state.holding is: {state.holding}")
@@ -140,8 +154,8 @@ class RobotPlanner:
         for rot, obj in surroundings:
             # Check if one of the nearby objects is the object we are searching for,
             # and the robot is now facing it. 
-            if obj_type == obj[0] and obj_color == obj[1] \
-                and rot == robot_rot:
+            if obj_type == obj[0] and rot == robot_rot and \
+                (obj_color == obj[1] or obj_color == ""):
                 state.holding = (obj_type, obj_color)
                 state.room_objects[current_room].remove(obj)
                 # print("GOING TO RETURN STATE")
@@ -257,8 +271,6 @@ class RobotPlanner:
             obj_type = state.holding[0]
         if obj_color == "":
             obj_color = state.holding[1]
-        if other_obj_color == "":
-            other_obj_color = obj_color
         if not (state.holding[0] == obj_type and state.holding[1] == obj_color):
             return False
         if current_room is None:
@@ -281,7 +293,8 @@ class RobotPlanner:
             for _, obj in surroundings:
                 # Check if one of the nearby objects is the object we are searching for,
                 # and the robot is now facing it. 
-                if other_obj_type == obj[0] and other_obj_color == obj[1]:
+                if other_obj_type == obj[0] and \
+                    (other_obj_color == obj[1] or other_obj_color==""):
                     other_obj_location = obj[2]
         # Didn't find the correct object (go to also failed)
         if other_obj_location is None:
@@ -444,14 +457,14 @@ class RobotPlanner:
             if object_location:
                 # print(f"CHECK IF THE OBJECT WHICH HAS A LOCATION IS IN A ROOM, object {obj_type} {obj_color} {object_location}")
                 # Check if the target object exists in the neighbor room.
-                if any(o[0] == obj_type and o[1] == obj_color and o[2] == object_location for o in state.room_objects[neighbor]):
+                if any(o[0] == obj_type and (o[1] == obj_color or obj_color=="") and o[2] == object_location for o in state.room_objects[neighbor]):
                     # print(f"THE TARGET OBJECT {obj_type} {obj_color} has been found in the neighbor room, returning: {door_tasks + [('go_to_object', obj_type, obj_color, object_location, neighbor)]}")
                     # Return the plan: handle door then go to the object in neighbor.
                     return door_tasks + [(action, obj_type, obj_color, object_location, neighbor)]
             else:
                 # print(f"CHECK IF THE OBJECT WHICH dont have A LOCATION IS IN A ROOM, object {obj_type} {obj_color}")
                 # Check if the target object exists in the neighbor room.
-                if any(o[0] == obj_type and o[1] == obj_color for o in state.room_objects[neighbor]):
+                if any(o[0] == obj_type and (o[1] == obj_color or obj_color=="") for o in state.room_objects[neighbor]):
                     # print(f"THE TARGET OBJECT {obj_type} {obj_color} has been found in the neighbor room, returning: {door_tasks + [('go_to_object', obj_type, obj_color, object_location, neighbor)]}")
                     # Return the plan: handle door then go to the object in neighbor.
                     return door_tasks + [(action, obj_type, obj_color, object_location, neighbor)]
@@ -529,7 +542,7 @@ class RobotPlanner:
     
     # TODO: Change to add position
     # Method to plan how to pick up object
-    def pick_up_object(self, state, obj_type, obj_color, obj_location=None, current_room=None):
+    def pick_up_object(self, state, obj_type, obj_color="", obj_location=None, current_room=None):
         """
         Method to plan to pick up an object.
         If the robot is already near and facing the object, it just returns the pick_up action.
@@ -605,23 +618,30 @@ class RobotPlanner:
         # print("WAS NOT ABLE TO GO TO DOOR AND OPEN IT")
         return self.lookup_ulternative(state, obj_type, obj_color, obj_location, room, 'open_door')
 
-    def __str__(self):
-        plan = self.plan
+    def __str__(self, plan=None):
+        if plan is None:
+            plan = self.plan
         steps = []
         for i, action in enumerate(plan, start=1):
             if not action:  # Skip if the action is empty
                 continue
 
             action_type = action[0]
+            color = action[2]
+            if color == "":
+                color = random.choice(["a","the"])
 
             if action_type == 'go_to' and len(action) > 2:
-                steps.append(f"Step {i}: Go to {action[2]} {action[1]}")
+                steps.append(f"Step {i}: Go to {color} {action[1]}")
             elif action_type == 'pick_up' and len(action) > 2:
-                steps.append(f"Step {i}: Pick up {action[2]} {action[1]}")
+                steps.append(f"Step {i}: Pick up {color} {action[1]}")
             elif action_type == 'open' and len(action) > 0:
-                steps.append(f"Step {i}: Open {action[2]} {action[1]}")
+                steps.append(f"Step {i}: Open {color} {action[1]}")
             elif action_type == 'drop_next_to' and len(action) > 0:
-                steps.append(f"Step {i}: Drop {action[2]} {action[1]} next to {action[4]} {action[3]}")
+                color2 = action[4]
+                if color2 == "":
+                    color = random.choice(["a","the"])
+                steps.append(f"Step {i}: Drop {color} {action[1]} next to {color2} {action[3]}")
             else:
                 steps.append(f"Step {i}: Invalid action {action}")
 
@@ -691,7 +711,8 @@ def is_blocked_by_object(position, grid_data,
 def get_objects(object_type, object_color, room_objects):
     filled_locations = []
     for obj in room_objects:
-        if obj[0] == object_type and obj[1] == object_color:
+        if obj[0] == object_type and \
+            (obj[1] == object_color or object_color==""):
             filled_locations.append(obj)
     return filled_locations
 

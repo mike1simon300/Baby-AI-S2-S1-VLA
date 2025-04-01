@@ -1,0 +1,23 @@
+dataset_name: "robot_mission_dataset"
+
+environments:
+  easy:
+    - "BabyAI-ActionObjDoor-v0"
+  intermediate:
+    - "BabyAI-FindObjS5-v0"
+  hard:
+    - "BabyAI-UnlockToUnlock-v0"
+    - "BabyAI-Synth-v0"
+
+samples:
+  easy: 100
+  intermediate: 150
+  hard: 200
+
+input_text:
+  include_grid: false
+  include_kb: true
+  include_mission: true
+  include_robot_location: true
+  include_robot_current_room: false
+  plan_prompt: "default"

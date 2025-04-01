@@ -53,7 +53,7 @@ class DataCollector:
         self.datasets = {"easy": [], "intermediate": [], "hard": []}
         
         # Ensure image save directory exists
-        self.image_dir = os.path.join(self.dataset_name, "images")
+        self.image_dir = os.path.join("datasets", self.dataset_name, "images")
         os.makedirs(self.image_dir, exist_ok=True)
 
     def collect_data(self):
@@ -96,7 +96,7 @@ class DataCollector:
         print("Data collection completed!")
 
     def save_dataset(self, difficulty):
-        dataset_name = f"{self.dataset_name}_{difficulty}"
+        dataset_name = f"./datasets/{self.dataset_name}/{difficulty}"
         dataset = Dataset.from_list(self.datasets[difficulty])
         dataset.save_to_disk(dataset_name)
         print(f"Dataset for {difficulty} saved successfully!")

@@ -48,3 +48,27 @@ Boss levels:
 - BabyAI-FindObjS5-v0
 - BabyAI-KeyCorridor-v0
 - BabyAI-Synth-v0
+
+
+Tested:
+
+BabyAI-OneRoomS8-v0 # (10/10) easy
+BabyAI-GoToRedBallGrey-v0  # easy
+BabyAI-GoToRedBall-v0 # easy/intermediate (distractors)
+BabyAI-GoToObj-v0  # easy
+BabyAI-GoToObjS4-v0  # easy
+BabyAI-GoToObjS6-v1  # easy
+BabyAI-ActionObjDoor-v0 # (10/10) intermidiate(a lot of distractors)/easy
+!MiniGrid-DoorKey-16x16-v0 (0/10) (All stop after 1st step, "Go to the key") (Fails mission is phrased differently)
+BabyAI-BlockedUnlockPickup-v0 # (0/10) (Fails blocked is not supported)
+BabyAI-UnlockToUnlock-v0 (10/10) intermidiate(complex logic)
+BabyAI-UnlockPickup-v0 # (10/10) intermidiate(complex logic)
+! BabyAI-Unlock-v0 # (3/10)
+BabyAI-PutNextS4N1-v0 # (10/10) intermidiate(a lot of distractors)/easy
+! BabyAI-PutNextS5N2Carrying-v0 (0/10) easy
+BabyAI-PutNextLocal-v0 (10/10) easy
+BabyAI-PickupDist-v0 (8/10) easy (Fails with object statements "Pickup the green object") (Fails keyword object is not supported)
+
+BabyAI-FindObjS5-v0 (10/10) intermidiate(a lot of distractors)/hard
+BabyAI-KeyCorridor-v0 (10/10) hard (complex logic)
+BabyAI-Synth-v0 (9/10) (Failure because of blocked door) hard (complex logic)

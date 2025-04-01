@@ -1,18 +1,79 @@
-dataset_name: "robot_mission_dataset"
+dataset_name: "robot_LLM_dataset_1k"
 
 environments:
   easy:
-    - "BabyAI-ActionObjDoor-v0"
+    - "BabyAI-OneRoomS8-v0"
+    - "BabyAI-PutNextLocal-v0"
+    - "BabyAI-PickupDist-v0"
+    - "BabyAI-GoToRedBallGrey-v0"
+    - "BabyAI-GoToRedBall-v0"
+    - "BabyAI-GoToRedBallNoDists-v0"
+    - "BabyAI-GoToObj-v0"  # easy
+    - "BabyAI-GoToObjS4-v0"  # easy
+    - "BabyAI-GoToObjS6-v1"  # easy
+    - "BabyAI-GoToLocal-v0"
+    - "BabyAI-GoToLocalS5N2-v0"
+    - "BabyAI-GoToLocalS6N2-v0"
+    - "BabyAI-GoToLocalS6N3-v0"
+    - "BabyAI-GoToLocalS6N4-v0"
+    - "BabyAI-GoToLocalS7N4-v0"
+    - "BabyAI-GoToLocalS7N5-v0"
+    - "BabyAI-GoToLocalS8N2-v0"
+    - "BabyAI-GoToLocalS8N3-v0"
+    - "BabyAI-GoToLocalS8N4-v0"
+    - "BabyAI-GoToLocalS8N5-v0"
+    - "BabyAI-GoToLocalS8N6-v0"
+    - "BabyAI-GoToLocalS8N7-v0"
+    - "BabyAI-GoToRedBlueBall-v0"
+    - "BabyAI-GoToDoor-v0"
+    - "BabyAI-OpenRedDoor-v0"
+    - "BabyAI-OpenDoor-v0"
+    - "BabyAI-OpenDoorColor-v0"
+    - "BabyAI-PutNextLocal-v0"
+    - "BabyAI-PutNextLocalS5N3-v0"
+    - "BabyAI-PutNextLocalS6N4-v0"
+    - "BabyAI-PutNextS4N1-v0"
+    - "BabyAI-PutNextS5N2-v0"
+    - "BabyAI-PutNextS5N1-v0"
+    - "BabyAI-PutNextS6N3-v0"
+    - "BabyAI-PutNextS7N4-v0"
+    # - "BabyAI-PutNextS5N2Carrying-v0" (Carrying is not supported)
+    # - "BabyAI-PutNextS6N3Carrying-v0" (Carrying is not supported)
+    # - "BabyAI-PutNextS7N4Carrying-v0" (Carrying is not supported)
+    - "BabyAI-UnlockLocal-v0"
+    - "BabyAI-UnlockPickup-v0"
+    - "BabyAI-UnlockPickupDist-v0"
+
   intermediate:
-    - "BabyAI-FindObjS5-v0"
-  hard:
+    - "BabyAI-ActionObjDoor-v0"
     - "BabyAI-UnlockToUnlock-v0"
+    - "BabyAI-UnlockPickup-v0"
+    - "BabyAI-PutNextS4N1-v0"
+    - "BabyAI-FindObjS5-v0"
+    - "BabyAI-GoTo-v0"
+    - "BabyAI-GoToOpen-v0"
+    - "BabyAI-GoToObjMaze-v0"
+    - "BabyAI-GoToObjMazeOpen-v0"
+    - "BabyAI-GoToObjMazeS4R2-v0"
+    - "BabyAI-GoToObjMazeS4-v0"
+    - "BabyAI-GoToObjMazeS5-v0"
+    - "BabyAI-GoToObjMazeS6-v0"
+    - "BabyAI-GoToObjMazeS7-v0"
+    - "BabyAI-GoToObjDoor-v0"
+    - "BabyAI-Open-v0"
+    - "BabyAI-UnlockLocalDist-v0"
+
+  hard:
+    - "BabyAI-GoToImpUnlock-v0"
+    - "BabyAI-KeyCorridor-v0"
     - "BabyAI-Synth-v0"
+    - "BabyAI-Pickup-v0"
+    - "BabyAI-Unlock-v0"
 
 samples:
-  easy: 100
-  intermediate: 150
-  hard: 200
+  easy: 400
+  intermediate: 300
+  hard: 300
 
 input_text:
   include_grid: false

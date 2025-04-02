@@ -1,3 +1,6 @@
+datasets
+pyyaml
+imageio
 # torch-ac>=1.4.0
 minigrid>=2.2.0
 # tensorboardX>=1.6

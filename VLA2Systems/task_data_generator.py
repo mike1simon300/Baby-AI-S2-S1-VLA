@@ -2,7 +2,7 @@ import random
 import gymnasium as gym
 import minigrid
 import matplotlib.pyplot as plt
-from VLA2Systems.utils import render_env
+from VLA2Systems.utils import render_env, get_grid_text
 from VLA2Systems.knowledge_base import KnowledgeBase
 from VLA2Systems.task_planning import RobotPlanner
 import imageio
@@ -150,3 +150,33 @@ class TaskDataGenerator:
         if print_plan:
             print(text)
         return text
+
+    def get_input_text(self, include_grid=False, include_kb=True, include_mission=True, 
+                       include_robot_location=True, include_robot_current_room=False, 
+                       plan_prompt="default", include_all=False):
+        text = ""
+        if include_grid or include_all:
+            text += "Grid Map of the environment:\n" + get_grid_text(self.knowledge_base.grid_data, 
+                                                                     self.start_location)
+        if include_kb or include_all:
+            text += "Knowledge Base:\n" + str(self.knowledge_base)
+        if include_robot_location or include_all:
+            text += "\nRobot location: " + str(self.start_position)
+        if include_robot_current_room or include_all:
+            text += ", which is in Room " + str(self.planner.current_room(self.start_location))
+        if include_mission or include_all:
+            text += "\nMission: " + self.mission
+        if plan_prompt == "default":
+            text += "\nIn order to achieve the mission the robot should preform these steps:\n"
+        else:
+            text += plan_prompt
+        return text
+
+    def get_output_text(self, plan=None):
+        text = ""
+        if plan is None:
+            plan = self.plan
+        if plan is None:
+            raise Exception("Plan is not there")
+        plan_text = str(self.planner.__str__(plan))
+        return plan_text

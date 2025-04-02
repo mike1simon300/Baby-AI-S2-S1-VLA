@@ -186,6 +186,7 @@ if __name__ == "__main__":
         # These are likely dictionaries mapping statistic names (like "mean", "min", "max") to values,
         # but you can print the raw values before synthesizing.
 
+        '''
         if "return_per_episode" in logs:
             print("Raw episode returns:", logs["return_per_episode"])
         else:
@@ -194,7 +195,8 @@ if __name__ == "__main__":
         if "num_frames_per_episode" in logs:
             print("Raw frames per episode:", logs["num_frames_per_episode"])
         else:
-            print("No num_frames_per_episode in logs!")
+            print("No num_frames_per_episode in logs!")'
+        '''
 
 
         update_end_time = time.time()

@@ -74,9 +74,9 @@ class DataCollector:
             with tqdm(total=self.sample_sizes[difficulty], desc=f"{difficulty} progress") as pbar:
                 while collected_samples < self.sample_sizes[difficulty]:
                     env_name = random.choice(env_list)
-                    seed = random.randint(0, 9999)
+                    seed = random.randint(0, 99999)
                     
-                    self.generator.reset(difficulty=difficulty, seed=seed)
+                    self.generator.reset(difficulty=difficulty, seed=seed, env_name=env_name)
                     try:
                         plan = self.generator.generate_plan()
                     except Exception as e:

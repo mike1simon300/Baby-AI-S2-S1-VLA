@@ -12,12 +12,15 @@ def print_grid(grid_data):
     for row in grid_data:
         print("".join(cell.type[0].upper() if cell else '.' for cell in row))
 
-def get_grid_text(grid_data):
+def get_grid_text(grid_data, robot_location):
     """Print the grid in a readable format."""
     text = ""
-    for row in grid_data:
-        text += "".join(cell.type[0].upper() if cell else '.' for cell in row)
-        text += "\n"
+    robot_col, robot_row = robot_location[1]
+    for i, row in enumerate(grid_data):
+        line = "".join(cell.type[0].upper() if cell else '.' for cell in row)
+        if i == robot_row:
+            line = line[:robot_col] + 'R' + line[robot_col + 1:]
+        text += line + "\n"
     return text
 
 def render_env(env, ax, pause=0.001, iteration:str|int=""):

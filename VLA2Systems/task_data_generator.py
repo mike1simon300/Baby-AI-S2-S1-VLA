@@ -2,7 +2,7 @@ import random
 import gymnasium as gym
 import minigrid
 import matplotlib.pyplot as plt
-from VLA2Systems.utils import render_env
+from VLA2Systems.utils import render_env, get_grid_text
 from VLA2Systems.knowledge_base import KnowledgeBase
 from VLA2Systems.task_planning import RobotPlanner
 import imageio
@@ -156,7 +156,7 @@ class TaskDataGenerator:
                        plan_prompt="default", include_all=False):
         text = ""
         if include_grid or include_all:
-            text += "Grid Map of the environment:\n" + str(self.knowledge_base.grid_data)
+            text += "Grid Map of the environment:\n" + get_grid_text(self.knowledge_base.grid_data)
         if include_kb or include_all:
             text += "Knowledge Base:\n" + str(self.knowledge_base)
         if include_robot_location or include_all:

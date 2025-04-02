@@ -1,4 +1,18 @@
-dataset_name: "robot_LLM_dataset_1k"
+dataset_name: "robot_LLM_grid_dataset_30k"
+
+samples:
+  easy: 10000
+  intermediate: 10000
+  hard: 10000
+
+input_text:
+  include_grid: true
+  include_kb: true
+  include_mission: true
+  include_robot_location: true
+  include_robot_current_room: true
+  plan_prompt: "default"
+
 
 environments:
   easy:
@@ -70,15 +84,3 @@ environments:
     - "BabyAI-Pickup-v0"
     - "BabyAI-Unlock-v0"
 
-samples:
-  easy: 400
-  intermediate: 300
-  hard: 300
-
-input_text:
-  include_grid: false
-  include_kb: true
-  include_mission: true
-  include_robot_location: true
-  include_robot_current_room: false
-  plan_prompt: "default"

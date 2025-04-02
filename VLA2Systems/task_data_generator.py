@@ -36,8 +36,13 @@ class TaskDataGenerator:
             int(self.robot_direction),
             (int(self.robot_position[0]), int(self.robot_position[1]))
         )
+        if self.env.unwrapped.carrying is None:
+            self.holding = None
+        else:
+            self.holding = (self.env.unwrapped.carrying.type, 
+                            self.env.unwrapped.carrying.color)
+
         self.start_position = self.start_location[1]
-        self.holding = None
         self.planner = RobotPlanner(
             self.knowledge_base,
             start_location=self.start_location,

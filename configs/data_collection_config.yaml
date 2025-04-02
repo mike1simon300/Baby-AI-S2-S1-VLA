@@ -51,9 +51,9 @@ environments:
     - "BabyAI-PutNextS5N1-v0"
     - "BabyAI-PutNextS6N3-v0"
     - "BabyAI-PutNextS7N4-v0"
-    # - "BabyAI-PutNextS5N2Carrying-v0"  # (Carrying is not supported)
-    # - "BabyAI-PutNextS6N3Carrying-v0"  # (Carrying is not supported)
-    # - "BabyAI-PutNextS7N4Carrying-v0"  # (Carrying is not supported)
+    - "BabyAI-PutNextS5N2Carrying-v0"
+    - "BabyAI-PutNextS6N3Carrying-v0"
+    - "BabyAI-PutNextS7N4Carrying-v0"
     - "BabyAI-UnlockLocal-v0"
     - "BabyAI-UnlockPickup-v0"
     - "BabyAI-UnlockPickupDist-v0"

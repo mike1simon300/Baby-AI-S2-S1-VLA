@@ -25,7 +25,7 @@ class TaskDataGenerator:
     def reset(self, seed=None, difficulty=None, env_name=None):
         if seed is None:
             seed = self.seed
-        if env_name is not None or env_name is not None or self.env is None:
+        if env_name is not None or difficulty is not None or self.env is None:
             env_name = self.select_environment(difficulty, env_name)
             self.env = gym.make(env_name, render_mode="rgb_array")
         self.rest_variables = self.env.reset(seed=seed)

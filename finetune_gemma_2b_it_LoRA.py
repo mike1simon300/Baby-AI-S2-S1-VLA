@@ -5,25 +5,31 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from trl import SFTTrainer, SFTConfig
 
-# Optionally, clear CUDA cache to free up memory
+# Clear CUDA cache
 torch.cuda.empty_cache()
 
-# Set dataset path (update as needed)
+# Load and split dataset
 dataset_path = "./datasets/robot_LLM_grid_dataset_15k_merged/mixed_dataset"
 dataset = load_from_disk(dataset_path)
 
-# Preprocess the dataset to ensure each example has a unified "text" field
-if "text" not in dataset.column_names:
-    def format_example(example):
-        # Adjust the prompt format if needed
-        return {"text": f"### Instruction:\n{example['input']}\n\n### Response:\n{example['output']}"}
-    dataset = dataset.map(format_example, batched=False)
+# Create 90/10 train/val split
+dataset = dataset.train_test_split(test_size=0.03)
+train_dataset = dataset["train"]
+eval_dataset = dataset["test"]
 
-# Load tokenizer and model
+# Format each example as instruction-response pair
+def format_example(example):
+    return {
+        "text": f"### Instruction:\n{example['input']}\n\n### Response:\n{example['output']}"
+    }
+
+train_dataset = train_dataset.map(format_example)
+eval_dataset = eval_dataset.map(format_example)
+
+# Load model and tokenizer
 model_name = "google/gemma-2b-it"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-# Configure BitsAndBytes for 4-bit quantization
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_use_double_quant=True,
@@ -31,7 +37,6 @@ bnb_config = BitsAndBytesConfig(
     bnb_4bit_quant_type="nf4",
 )
 
-# Load the model with 4-bit quantization
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
     quantization_config=bnb_config,
@@ -39,10 +44,9 @@ model = AutoModelForCausalLM.from_pretrained(
     torch_dtype=torch.float16,
 )
 
-# Prepare the model for k-bit training (required for LoRA with quantized models)
 model = prepare_model_for_kbit_training(model)
 
-# Set up LoRA configuration
+# LoRA configuration
 lora_config = LoraConfig(
     r=8,
     lora_alpha=16,
@@ -51,32 +55,36 @@ lora_config = LoraConfig(
     task_type="CAUSAL_LM"
 )
 
-# Wrap the model with LoRA adapters
 model = get_peft_model(model, lora_config)
 
-# Define training configuration using SFTConfig from TRL
+# Training configuration
 training_args = SFTConfig(
-    output_dir="./gemma-2b-it-finetuned",
-    per_device_train_batch_size=1,         # Adjust as needed
-    gradient_accumulation_steps=16,        # Effective batch size = 1 x 16
+    output_dir="./gemma-2b-it-finetuned_2",
+    per_device_train_batch_size=1,
+    gradient_accumulation_steps=16,
     num_train_epochs=3,
-    save_steps=500,
-    logging_dir="./logs",
-    logging_steps=10,
+    save_strategy="epoch",
+    save_total_limit=2,
+    logging_dir="./logs",                 # Logs go here
+    logging_steps=1,                     # Log every step
+    report_to="tensorboard",             # Enable TensorBoard logging
+    evaluation_strategy="steps",
+    per_device_eval_batch_size=1,
+    eval_steps=50,                       # Validate every 50 steps
     learning_rate=2e-5,
     weight_decay=0.01,
     warmup_steps=100,
     fp16=True,
-    dataloader_num_workers=4,
-    max_length=1024,  # You can reduce this if memory issues persist
+    max_length=1024,
     packing=False
 )
 
-# Initialize the trainer (note: do not pass tokenizer here as it's not accepted)
+# Initialize trainer
 trainer = SFTTrainer(
     model=model,
     args=training_args,
-    train_dataset=dataset
+    train_dataset=train_dataset,
+    eval_dataset=eval_dataset,
 )
 
 # Start training

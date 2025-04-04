@@ -9,8 +9,26 @@ import utils
 import minigrid
 from utils import device
 from model import ACModel
+import yaml
+import gymnasium as gym
+import random
 
+def make_env(env_list, seed=None, render_mode=None):
+    env_key = random.choice(env_list)
+    env = gym.make(env_key, render_mode=render_mode)
+    env.reset(seed=seed)
+    return env
 
+class EnvSelectorConfigParser:
+    def __init__(self, config_path):
+        with open(config_path, 'r') as file:
+            config = yaml.safe_load(file)
+        
+        # Environment lists for difficulties
+        self.easy_envs = config.get("environments", {}).get("easy", [])
+        self.intermediate_envs = config.get("environments", {}).get("intermediate", [])
+        self.hard_envs = config.get("environments", {}).get("hard", [])
+        
 # Parse arguments
 
 parser = argparse.ArgumentParser()
@@ -66,6 +84,8 @@ parser.add_argument("--reward-reshaping", action="store_true", default=False,
                     help="if true add reward reshaping")
 parser.add_argument("--reward-reshaping-factor", type=float, default=1.0,
                     help="if true add reward reshaping")
+parser.add_argument("--env-config-file", default=None,
+                    help="if filled it will take the list of environments from the easy tag in the config file")
 
 
 if __name__ == "__main__":
@@ -121,7 +141,11 @@ if __name__ == "__main__":
 
     envs = []
     for i in range(args.procs):
-        envs.append(utils.make_env(args.env, args.seed + 10000 * i))
+        if args.env_config_file is None:
+            envs.append(utils.make_env(args.env, args.seed + 10000 * i))
+        else:
+            config = EnvSelectorConfigParser(args.env_config_file)
+            envs.append(make_env(config.easy_envs, args.seed + 10000 * i))
     txt_logger.info("Environments loaded\n")
 
     # Load training status

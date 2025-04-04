@@ -9,8 +9,26 @@ import utils
 import minigrid
 from utils import device
 from model import ACModel
+import yaml
+import gymnasium as gym
+import random
 
+def make_env(env_list, seed=None, render_mode=None):
+    env_key = random.choice(env_list)
+    env = gym.make(env_key, render_mode=render_mode)
+    env.reset(seed=seed)
+    return env
 
+class EnvSelectorConfigParser:
+    def __init__(self, config_path):
+        with open(config_path, 'r') as file:
+            config = yaml.safe_load(file)
+        
+        # Environment lists for difficulties
+        self.easy_envs = config.get("environments", {}).get("easy", [])
+        self.intermediate_envs = config.get("environments", {}).get("intermediate", [])
+        self.hard_envs = config.get("environments", {}).get("hard", [])
+        
 # Parse arguments
 
 parser = argparse.ArgumentParser()
@@ -62,6 +80,13 @@ parser.add_argument("--recurrence", type=int, default=1,
                     help="number of time-steps gradient is backpropagated (default: 1). If > 1, a LSTM is added to the model to have memory.")
 parser.add_argument("--text", action="store_true", default=False,
                     help="add a GRU to the model to handle text input")
+parser.add_argument("--reward-reshaping", action="store_true", default=False,
+                    help="if true add reward reshaping")
+parser.add_argument("--reward-reshaping-factor", type=float, default=1.0,
+                    help="if true add reward reshaping")
+parser.add_argument("--env-config-file", default=None,
+                    help="if filled it will take the list of environments from the easy tag in the config file")
+
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -69,6 +94,23 @@ if __name__ == "__main__":
     args.mem = args.recurrence > 1
 
     # Set run dir
+    
+    if args.reward_reshaping:
+        def custom_reward_shaping(obs, action, reward, done):
+            # Only apply shaping if original reward is 0.0
+            if reward == 0.0:
+                # Map actions to strings based on BabyAI/MiniGrid action definitions
+                # Typical action space: 0=left, 1=right, 2=forward, 3=pickup, 4=drop, 5=toggle, 6=done
+                if action in [0, 1, 2]:  # rotate left/right or move forward
+                    return -0.01 * args.reward_reshaping_factor
+                elif action in [3, 4]:  # pickup or drop
+                    return -0.02 * args.reward_reshaping_factor
+                elif action == 5:  # toggle
+                    return -0.03 * args.reward_reshaping_factor
+            return reward
+    else:
+        custom_reward_shaping = None
+      # Leave original reward if non-zero (e.g. success)
 
     date = datetime.datetime.now().strftime("%y-%m-%d-%H-%M-%S")
     default_model_name = f"{args.env}_{args.algo}_seed{args.seed}_{date}"
@@ -99,7 +141,11 @@ if __name__ == "__main__":
 
     envs = []
     for i in range(args.procs):
-        envs.append(utils.make_env(args.env, args.seed + 10000 * i))
+        if args.env_config_file is None:
+            envs.append(utils.make_env(args.env, args.seed + 10000 * i))
+        else:
+            config = EnvSelectorConfigParser(args.env_config_file)
+            envs.append(make_env(config.easy_envs, args.seed + 10000 * i))
     txt_logger.info("Environments loaded\n")
 
     # Load training status
@@ -135,7 +181,8 @@ if __name__ == "__main__":
     elif args.algo == "ppo":
         algo = torch_ac.PPOAlgo(envs, acmodel, device, args.frames_per_proc, args.discount, args.lr, args.gae_lambda,
                                 args.entropy_coef, args.value_loss_coef, args.max_grad_norm, args.recurrence,
-                                args.optim_eps, args.clip_eps, args.epochs, args.batch_size, preprocess_obss)
+                                args.optim_eps, args.clip_eps, args.epochs, args.batch_size, preprocess_obss, 
+                                reshape_reward=custom_reward_shaping)
     else:
         raise ValueError("Incorrect algorithm name: {}".format(args.algo))
 

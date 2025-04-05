@@ -2,7 +2,7 @@ import random
 import gymnasium as gym
 import minigrid
 import matplotlib.pyplot as plt
-from VLA2Systems.rl_utils import render_env, get_grid_text
+from VLA2Systems.utils import render_env, get_grid_text
 from VLA2Systems.knowledge_base import KnowledgeBase
 from VLA2Systems.task_planning import RobotPlanner
 import imageio

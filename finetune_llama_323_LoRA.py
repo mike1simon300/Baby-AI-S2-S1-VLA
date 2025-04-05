@@ -1,7 +1,7 @@
 import os
 import torch
 from datasets import load_from_disk
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, LlamaTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from trl import SFTTrainer, SFTConfig
 
@@ -29,10 +29,8 @@ eval_dataset = eval_dataset.map(format_example)
 # Load model and tokenizer
 model_name = "meta-llama/Llama-3.2-3B-Instruct"
 
-tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct", legacy=True)
-tokenizer.pad_token = tokenizer.eos_token
-
-# Enable padding token for tokenizer
+# Load the tokenizer
+tokenizer = AutoTokenizer.from_pretrained(model_name)
 tokenizer.pad_token = tokenizer.eos_token
 
 # BitsAndBytes configuration for 4-bit quantization

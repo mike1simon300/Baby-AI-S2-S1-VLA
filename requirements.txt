@@ -1,9 +1,11 @@
 datasets
 pyyaml
 imageio
-# torch-ac>=1.4.0
+torch-ac>=1.4.0
 minigrid>=2.2.0
-# tensorboardX>=1.6
+tensorboardX>=1.6
 numpy>=1.3
 gymnasium>=0.26
 matplotlib
+# sentence-transformers
+# stable-baselines3

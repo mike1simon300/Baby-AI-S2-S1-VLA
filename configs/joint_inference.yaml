@@ -1,0 +1,19 @@
+
+
+system2:
+  model_path: "./datasets/llama-3.2-3b-finetuned_mixed_third_of_an_epoch/checkpoint-800"
+  from_prompt: False
+  dataset_path: "./datasets/robot_LLM_grid_dataset_30/easy"
+  temperature: 0.7
+  top_p: 0.9
+  cache_dir: "./datasets/hf_cache"
+
+system1:
+  # model_path: "./datasets/envs_AC_reward_shaping_memory_14m/"
+  model_path: "./datasets/envs_AC_reward_shaping/"
+  argmax: False
+  pause: 0.05
+  text: True
+  memory: False  # True
+  visulize: True
+  verify: True

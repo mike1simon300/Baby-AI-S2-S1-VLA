@@ -2,13 +2,13 @@ import random
 import gymnasium as gym
 import minigrid
 import matplotlib.pyplot as plt
-from VLA2Systems.utils import render_env, get_grid_text
+from VLA2Systems.rl_utils import render_env, get_grid_text
 from VLA2Systems.knowledge_base import KnowledgeBase
 from VLA2Systems.task_planning import RobotPlanner
 import imageio
 
 class TaskDataGenerator:
-    def __init__(self, env_options, seed=None):
+    def __init__(self, env_options, seed=None, env=None):
         """
         Initialize the data generator.
         :param env_options: Either a list of environment names or a dictionary categorized by difficulty.
@@ -21,14 +21,28 @@ class TaskDataGenerator:
         self.knowledge_base = None
         self.planner = None
         self.plan = None
-    
+        self.from_env = False
+        if env is not None:
+            self.from_env = True
+            self.env = env
+
     def reset(self, seed=None, difficulty=None, env_name=None):
         if seed is None:
             seed = self.seed
-        if env_name is not None or difficulty is not None or self.env is None:
+        if self.from_env:
+            self.rest_variables = self.env.reset(seed=seed)
+        elif env_name is not None or difficulty is not None or self.env is None:
             env_name = self.select_environment(difficulty, env_name)
             self.env = gym.make(env_name, render_mode="rgb_array")
         self.rest_variables = self.env.reset(seed=seed)
+        self.init_planner(self.env, self.rest_variables)
+        # print(f"Initialized environment with seed {seed}")
+
+    def init_planner(self, env=None, rest_variables=None):
+        if env is None:
+            env = self.env
+        if rest_variables is None:
+            rest_variables = self.rest_variables
         self.knowledge_base = KnowledgeBase(self.env)
         self.robot_position = self.env.unwrapped.agent_pos
         self.robot_direction = self.env.unwrapped.agent_dir
@@ -50,7 +64,7 @@ class TaskDataGenerator:
             verbose=0
         )
         self.mission = self.rest_variables[0]["mission"]
-        # print(f"Initialized environment with seed {seed}")
+
 
     def select_environment(self, difficulty=None, env_name=None):
         """

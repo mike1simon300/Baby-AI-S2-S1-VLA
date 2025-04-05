@@ -1,97 +1,92 @@
-import os
+import argparse
+import yaml
 import torch
 from datasets import load_from_disk
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from trl import SFTTrainer, SFTConfig
 
-# Clear CUDA cache
-torch.cuda.empty_cache()
+# Load config from YAML file
+def load_config(path):
+    with open(path, "r") as f:
+        return yaml.safe_load(f)
 
-# Load and split dataset
-dataset_path = "./datasets/robot_LLM_grid_dataset_15k_merged/mixed_dataset"
-dataset = load_from_disk(dataset_path)
+# Main
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", type=str, required=True, help="Path to config YAML file")
+    args = parser.parse_args()
 
-# Create 97/3 train/val split
-dataset = dataset.train_test_split(test_size=0.03)
-train_dataset = dataset["train"]
-eval_dataset = dataset["test"]
+    config = load_config(args.config)
 
-# Format each example as instruction-response pair
-def format_example(example):
-    return {
-        "text": f"### Instruction:\n{example['input']}\n\n### Response:\n{example['output']}"
-    }
+    # Clear cache
+    torch.cuda.empty_cache()
 
-train_dataset = train_dataset.map(format_example)
-eval_dataset = eval_dataset.map(format_example)
+    # Load and split dataset
+    dataset = load_from_disk(config["dataset_path"])
+    dataset = dataset.train_test_split(test_size=config["test_size"])
+    train_dataset = dataset["train"]
+    eval_dataset = dataset["test"]
 
-# Load model and tokenizer
-model_name = "meta-llama/Llama-3.2-3B-Instruct"
+    def format_example(example):
+        return {
+            "text": f"### Instruction:\n{example['input']}\n\n### Response:\n{example['output']}"
+        }
 
-# Load the tokenizer
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-tokenizer.pad_token = tokenizer.eos_token
+    train_dataset = train_dataset.map(format_example)
+    eval_dataset = eval_dataset.map(format_example)
 
-# BitsAndBytes configuration for 4-bit quantization
-bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.float16,
-    bnb_4bit_quant_type="nf4",
-)
+    # Load tokenizer and model
+    tokenizer = AutoTokenizer.from_pretrained(config["model_name"])
+    tokenizer.pad_token = tokenizer.eos_token
 
-# Load model with quantization config
-model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    quantization_config=bnb_config,
-    device_map="auto",
-    torch_dtype=torch.float16,
-)
+    bnb_cfg = BitsAndBytesConfig(
+        load_in_4bit=config["bnb_config"]["load_in_4bit"],
+        bnb_4bit_compute_dtype=getattr(torch, config["bnb_config"]["bnb_4bit_compute_dtype"]),
+        bnb_4bit_quant_type=config["bnb_config"]["bnb_4bit_quant_type"],
+    )
 
-# Prepare model for k-bit training
-model = prepare_model_for_kbit_training(model)
+    model = AutoModelForCausalLM.from_pretrained(
+        config["model_name"],
+        quantization_config=bnb_cfg,
+        device_map="auto",
+        torch_dtype=torch.float16,
+    )
 
-# LoRA configuration
-lora_config = LoraConfig(
-    r=8,
-    lora_alpha=16,
-    lora_dropout=0.1,
-    bias="none",
-    task_type="CAUSAL_LM"
-)
+    model = prepare_model_for_kbit_training(model)
 
-# Apply LoRA to the model
-model = get_peft_model(model, lora_config)
+    lora_cfg = LoraConfig(
+        r=config["lora_config"]["r"],
+        lora_alpha=config["lora_config"]["lora_alpha"],
+        lora_dropout=config["lora_config"]["lora_dropout"],
+        bias=config["lora_config"]["bias"],
+        task_type=config["lora_config"]["task_type"],
+    )
 
-# Training configuration
-training_args = SFTConfig(
-    output_dir="./llama-3.2-3b-finetuned_tmp_1",
-    per_device_train_batch_size=1,
-    gradient_accumulation_steps=16,
-    num_train_epochs=3,
-    save_strategy="epoch",
-    save_total_limit=2,
-    logging_dir="./logs",
-    logging_steps=1,
-    report_to="tensorboard",
-    evaluation_strategy="steps",
-    per_device_eval_batch_size=1,
-    eval_steps=50,
-    learning_rate=2e-5,
-    weight_decay=0.01,
-    warmup_steps=100,
-    fp16=True,
-    max_length=1024,
-    packing=False
-)
+    model = get_peft_model(model, lora_cfg)
 
-# Initialize trainer
-trainer = SFTTrainer(
-    model=model,
-    args=training_args,
-    train_dataset=train_dataset,
-    eval_dataset=eval_dataset,
-)
+    training_config = config["training"]
 
-# Start training
-trainer.train()
+    # Ensure correct types
+    training_config["learning_rate"] = float(training_config["learning_rate"])
+    training_config["weight_decay"] = float(training_config["weight_decay"])
+    training_config["warmup_steps"] = int(training_config["warmup_steps"])
+    training_config["num_train_epochs"] = int(training_config["num_train_epochs"])
+    training_config["eval_steps"] = int(training_config["eval_steps"])
+    training_config["gradient_accumulation_steps"] = int(training_config["gradient_accumulation_steps"])
+    training_config["per_device_train_batch_size"] = int(training_config["per_device_train_batch_size"])
+    training_config["per_device_eval_batch_size"] = int(training_config["per_device_eval_batch_size"])
+
+    training_args = SFTConfig(**config["training"])
+
+    trainer = SFTTrainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+    )
+
+    trainer.train()
+
+if __name__ == "__main__":
+    main()

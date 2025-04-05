@@ -11,7 +11,6 @@ def load_config(path):
     with open(path, "r") as f:
         return yaml.safe_load(f)
 
-# Main
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True, help="Path to config YAML file")
@@ -28,6 +27,7 @@ def main():
     train_dataset = dataset["train"]
     eval_dataset = dataset["test"]
 
+    # Format examples: concatenate instruction and response.
     def format_example(example):
         return {
             "text": f"### Instruction:\n{example['input']}\n\n### Response:\n{example['output']}"
@@ -35,6 +35,17 @@ def main():
 
     train_dataset = train_dataset.map(format_example)
     eval_dataset = eval_dataset.map(format_example)
+
+    # Remove extra columns, ensuring each example has a "text" field.
+    train_dataset = train_dataset.remove_columns([col for col in train_dataset.column_names if col != "text"])
+    eval_dataset = eval_dataset.remove_columns([col for col in eval_dataset.column_names if col != "text"])
+
+    # Debug: print first 3 formatted training examples
+    print("Printing first 3 formatted training examples for inspection:")
+    for i in range(3):
+        print(f"Example {i}:")
+        print(train_dataset[i]["text"])
+        print("-----")
 
     # Load tokenizer and model
     tokenizer = AutoTokenizer.from_pretrained(config["model_name"])
@@ -66,8 +77,7 @@ def main():
     model = get_peft_model(model, lora_cfg)
 
     training_config = config["training"]
-
-    # Ensure correct types
+    # Ensure correct types for training config
     training_config["learning_rate"] = float(training_config["learning_rate"])
     training_config["weight_decay"] = float(training_config["weight_decay"])
     training_config["warmup_steps"] = int(training_config["warmup_steps"])
@@ -77,13 +87,40 @@ def main():
     training_config["per_device_train_batch_size"] = int(training_config["per_device_train_batch_size"])
     training_config["per_device_eval_batch_size"] = int(training_config["per_device_eval_batch_size"])
 
-    training_args = SFTConfig(**config["training"])
+    training_args = SFTConfig(**training_config)
+
+    # Custom data collator: if a feature has no "text" key, decode its input_ids.
+    # Then, split the raw text at the delimiter "### Response:" and mask out the prompt tokens.
+    def custom_data_collator(features):
+        texts = []
+        for i, f in enumerate(features):
+            if "text" in f:
+                texts.append(f["text"])
+            else:
+                # Decode the already-tokenized inputs to recover the raw text.
+                decoded = tokenizer.decode(f["input_ids"], skip_special_tokens=False)
+                texts.append(decoded)
+        batch = tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
+        labels = batch["input_ids"].clone()
+
+        delimiter = "### Response:"
+        for i, text in enumerate(texts):
+            if delimiter in text:
+                prompt_part = text.split(delimiter)[0]
+                prompt_ids = tokenizer(prompt_part, add_special_tokens=False)["input_ids"]
+                prompt_length = len(prompt_ids)
+                labels[i, :prompt_length] = -100
+            else:
+                print(f"Warning: Delimiter '{delimiter}' not found in example {i}.")
+        batch["labels"] = labels
+        return batch
 
     trainer = SFTTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
+        data_collator=custom_data_collator,
     )
 
     trainer.train()

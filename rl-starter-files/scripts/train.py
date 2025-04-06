@@ -97,7 +97,6 @@ parser.add_argument("--env-config-file", default=None,
 
 class CustomEnvWrapper(gym.ObservationWrapper):
     def __init__(self, env, text_encoder, device=None):
-        print("Heeeeeeeeeeeeeeeeeeeeeeeeeeeeeeere")
         super().__init__(env)
         # Detect device
         if device is None:
@@ -119,7 +118,6 @@ class CustomEnvWrapper(gym.ObservationWrapper):
         })
         
     def observation(self, obs):
-        print("Heeeeeeeeeeeeeeeeeeeeeeeeeeeeeeere")
         mission = obs['mission']  # mission is a string
         # Encode mission to a numpy array (default convert_to_tensor=False)
         mission_embedding = self.text_encoder.encode(mission, convert_to_tensor=False)
@@ -181,7 +179,6 @@ if __name__ == "__main__":
     # Load environments
 
     if args.sentence:
-        print("HHHHHHHHHHHHHHHeeeeeeeeeeeeeeeeeeeeeeeeeeeerrrrrrrrrrrrrr")
         sentence_encoder = SentenceTransformer("all-MiniLM-L6-v2")
     else:
         sentence_encoder = None

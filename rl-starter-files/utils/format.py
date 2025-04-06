@@ -45,7 +45,7 @@ def get_obss_preprocessor_sentence(obs_space):
 
     return obs_space, preprocess_obss
 
-def get_obss_preprocessor(obs_space):
+def get_obss_preprocessor_sentence(obs_space):
     # Check if obs_space is an image space
     if isinstance(obs_space, gym.spaces.Box):
         obs_space = {"image": obs_space.shape}
@@ -54,28 +54,61 @@ def get_obss_preprocessor(obs_space):
             return torch_ac.DictList({
                 "image": preprocess_images(obss, device=device)
             })
-
     # Check if it is a MiniGrid observation space
     elif isinstance(obs_space, gym.spaces.Dict) and "image" in obs_space.spaces.keys():
         obs_space = {"image": obs_space.spaces["image"].shape, "text": 100}
 
         vocab = Vocabulary(obs_space["text"])
+        encoder = SentenceTransformer("all-MiniLM-L6-v2")
+        
         def preprocess_obss(obss, device=None):
             images = preprocess_images([obs["image"] for obs in obss], device=device)
             text_tensor = preprocess_texts([obs["mission"] for obs in obss], vocab, device=device)
-            raw_text = numpy.array([obs["mission"] for obs in obss], dtype=object)  # <-- FIX HERE
+            # Get raw texts as an array of objects
+            raw_text = numpy.array([obs["mission"] for obs in obss], dtype=object)
+            
+            # Initialize a cache if it doesn't exist
+            if not hasattr(preprocess_obss, "cache"):
+                preprocess_obss.cache = {}
+
+            cache = preprocess_obss.cache
+            embeddings = [None] * len(raw_text)
+            new_texts = []
+            new_indices = []
+
+            # Look up each mission in the cache
+            for i, t in enumerate(raw_text):
+                # Use the string value as key (if t is not hashable, convert it to str)
+                key = str(t)
+                if key in cache:
+                    embeddings[i] = cache[key]
+                else:
+                    new_texts.append(t)
+                    new_indices.append(i)
+
+            # If there are texts not in the cache, encode them in a batch
+            if new_texts:
+                new_emb = encoder.encode(new_texts, show_progress_bar=False)
+                for idx, emb in zip(new_indices, new_emb):
+                    embeddings[idx] = emb
+                    cache[str(raw_text[idx])] = emb
+
+            embbed_text = numpy.array(embeddings)
             return torch_ac.DictList({
                 "image": images,
                 "text": text_tensor,
+                "embbed_text": embbed_text,
                 "raw_text": raw_text
             })
 
         preprocess_obss.vocab = vocab
+        preprocess_obss.encoder = encoder
 
     else:
         raise ValueError("Unknown observation space: " + str(obs_space))
 
     return obs_space, preprocess_obss
+
 
 
 def preprocess_images(images, device=None):

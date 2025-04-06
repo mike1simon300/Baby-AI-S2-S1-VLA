@@ -14,6 +14,8 @@ import yaml
 import gymnasium as gym
 import random
 from sentence_transformers import SentenceTransformer
+from gymnasium import spaces
+import numpy as np
 
 
 def make_env(env_list, seed=None, render_mode=None, text_encoder=None):

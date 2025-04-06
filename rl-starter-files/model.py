@@ -16,12 +16,16 @@ def init_params(m):
 
 
 class ACModel(nn.Module, torch_ac.RecurrentACModel):
-    def __init__(self, obs_space, action_space, use_memory=False, use_text=False):
+    def __init__(self, obs_space, action_space, use_memory=False, use_text=False, use_sentence_embed=False, use_LLM=False, sentence_embedding_size=384):
         super().__init__()
 
         # Decide which components are enabled
         self.use_text = use_text
         self.use_memory = use_memory
+        self.use_sentence_embed=use_sentence_embed
+        self.use_LLM = use_LLM
+        if self.use_sentence_embed:
+            self.sentence_embedding_size = sentence_embedding_size
 
         # Define image embedding
         self.image_conv = nn.Sequential(
@@ -41,8 +45,21 @@ class ACModel(nn.Module, torch_ac.RecurrentACModel):
         if self.use_memory:
             self.memory_rnn = nn.LSTMCell(self.image_embedding_size, self.semi_memory_size)
 
+        # Define sentence embedding
+        if self.use_sentence_embed:
+            self.text_embedding_size = 128
+
+            self.sentence_projection = nn.Sequential(
+                nn.Linear(self.sentence_embedding_size, 256),
+                nn.BatchNorm1d(256),
+                nn.ReLU(),
+                nn.Dropout(0.1),
+                nn.Linear(256, self.text_embedding_size),
+                nn.Tanh()  # Tanh squashes outputs to [-1, 1]
+            )
+
         # Define text embedding
-        if self.use_text:
+        elif self.use_text:
             self.word_embedding_size = 32
             self.word_embedding = nn.Embedding(obs_space["text"], self.word_embedding_size)
             self.text_embedding_size = 128
@@ -50,7 +67,7 @@ class ACModel(nn.Module, torch_ac.RecurrentACModel):
 
         # Resize image embedding
         self.embedding_size = self.semi_memory_size
-        if self.use_text:
+        if self.use_text or self.use_sentence_embed:
             self.embedding_size += self.text_embedding_size
 
         # Define actor's model
@@ -91,7 +108,16 @@ class ACModel(nn.Module, torch_ac.RecurrentACModel):
         else:
             embedding = x
 
-        if self.use_text:
+        if self.use_LLM:
+            obs.raw_text
+            embedding = torch.cat((embedding, obs.raw_text), dim=1)
+
+
+        if self.use_sentence_embed:
+            embedded_sentence = self.sentence_projection(torch.tensor(obs.raw_text))
+            embedding = torch.cat((embedding, embedded_sentence), dim=1)
+
+        elif self.use_text:
             embed_text = self._get_embed_text(obs.text)
             embedding = torch.cat((embedding, embed_text), dim=1)
 
@@ -100,6 +126,11 @@ class ACModel(nn.Module, torch_ac.RecurrentACModel):
 
         x = self.critic(embedding)
         value = x.squeeze(1)
+
+        # Debugging gradients right after backward pass
+        for name, param in self.named_parameters():
+            if param.grad is None:
+                print(f"Param '{name}' has no grad. Check if used correctly.")
 
         return dist, value, memory
 
@@ -192,6 +223,8 @@ class SmallTransformerACModel(nn.Module):
     @property
     def recurrent(self):
         return False
+    
+
     
 class EarlyFusionTransformerACModel(nn.Module):
     def __init__(self, obs_space, action_space, patch_size=4, num_layers=2, num_heads=2,

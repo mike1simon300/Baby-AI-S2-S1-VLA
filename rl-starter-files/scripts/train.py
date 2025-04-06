@@ -2,6 +2,7 @@ import argparse
 import time
 import datetime
 import torch_ac
+import torch
 import tensorboardX
 import sys
 
@@ -12,11 +13,16 @@ from model import ACModel
 import yaml
 import gymnasium as gym
 import random
+from sentence_transformers import SentenceTransformer
 
-def make_env(env_list, seed=None, render_mode=None):
+
+def make_env(env_list, seed=None, render_mode=None, text_encoder=None):
     env_key = random.choice(env_list)
     env = gym.make(env_key, render_mode=render_mode)
     env.reset(seed=seed)
+    if text_encoder:
+        return CustomEnvWrapper(env, text_encoder)
+
     return env
 
 class EnvSelectorConfigParser:
@@ -80,6 +86,8 @@ parser.add_argument("--recurrence", type=int, default=1,
                     help="number of time-steps gradient is backpropagated (default: 1). If > 1, a LSTM is added to the model to have memory.")
 parser.add_argument("--text", action="store_true", default=False,
                     help="add a GRU to the model to handle text input")
+parser.add_argument("--sentence", action="store_true", default=False,
+                    help="Use sentence embedding network to handle text input")
 parser.add_argument("--reward-reshaping", action="store_true", default=False,
                     help="if true add reward reshaping")
 parser.add_argument("--reward-reshaping-factor", type=float, default=1.0,
@@ -87,6 +95,39 @@ parser.add_argument("--reward-reshaping-factor", type=float, default=1.0,
 parser.add_argument("--env-config-file", default=None,
                     help="if filled it will take the list of environments from the easy tag in the config file")
 
+class CustomEnvWrapper(gym.ObservationWrapper):
+    def __init__(self, env, text_encoder, device=None):
+        print("Heeeeeeeeeeeeeeeeeeeeeeeeeeeeeeere")
+        super().__init__(env)
+        # Detect device
+        if device is None:
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+            self.device = device
+        # self.text_encoder = text_encoder.to(self.device)
+        self.text_encoder = text_encoder
+        self.mission = ""
+
+        # Example: If the mission space is a string, we might convert it to an embedding or integer
+        self.mission_embedding_dim = self.text_encoder.get_sentence_embedding_dimension()
+        
+        # Modify observation space (e.g., adding embedding space)
+        self.observation_space = spaces.Dict({
+            'image': self.env.observation_space.spaces['image'],
+            'direction': self.env.observation_space.spaces['direction'],
+            'mission': spaces.Box(low=-np.inf, high=np.inf, shape=(self.mission_embedding_dim,), dtype=np.float32)  # mission embedding
+        })
+        
+    def observation(self, obs):
+        print("Heeeeeeeeeeeeeeeeeeeeeeeeeeeeeeere")
+        mission = obs['mission']  # mission is a string
+        # Encode mission to a numpy array (default convert_to_tensor=False)
+        mission_embedding = self.text_encoder.encode(mission, convert_to_tensor=False)
+        # Ensure the embedding is float32 (gym Box expects float32)
+        mission_embedding = mission_embedding.astype(np.float32)
+        
+        obs["mission"] = mission_embedding
+        return obs
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -139,13 +180,19 @@ if __name__ == "__main__":
 
     # Load environments
 
+    if args.sentence:
+        print("HHHHHHHHHHHHHHHeeeeeeeeeeeeeeeeeeeeeeeeeeeerrrrrrrrrrrrrr")
+        sentence_encoder = SentenceTransformer("all-MiniLM-L6-v2")
+    else:
+        sentence_encoder = None
+
     envs = []
     for i in range(args.procs):
         if args.env_config_file is None:
             envs.append(utils.make_env(args.env, args.seed + 10000 * i))
         else:
             config = EnvSelectorConfigParser(args.env_config_file)
-            envs.append(make_env(config.easy_envs, args.seed + 10000 * i))
+            envs.append(make_env(config.easy_envs, args.seed + 10000 * i, text_encoder=sentence_encoder))
     txt_logger.info("Environments loaded\n")
 
     # Load training status
@@ -165,7 +212,7 @@ if __name__ == "__main__":
 
     # Load model
 
-    acmodel = ACModel(obs_space, envs[0].action_space, args.mem, args.text)
+    acmodel = ACModel(obs_space, envs[0].action_space, args.mem, args.text, args.sentence)
     if "model_state" in status:
         acmodel.load_state_dict(status["model_state"])
     acmodel.to(device)

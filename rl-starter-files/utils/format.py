@@ -26,9 +26,13 @@ def get_obss_preprocessor(obs_space):
         vocab = Vocabulary(obs_space["text"])
 
         def preprocess_obss(obss, device=None):
+            images = preprocess_images([obs["image"] for obs in obss], device=device)
+            text_tensor = preprocess_texts([obs["mission"] for obs in obss], vocab, device=device)
+            raw_text = numpy.array([obs["mission"] for obs in obss], dtype=object)  # <-- FIX HERE
             return torch_ac.DictList({
-                "image": preprocess_images([obs["image"] for obs in obss], device=device),
-                "text": preprocess_texts([obs["mission"] for obs in obss], vocab, device=device)
+                "image": images,
+                "text": text_tensor,
+                "raw_text": raw_text
             })
 
         preprocess_obss.vocab = vocab

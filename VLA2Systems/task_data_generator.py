@@ -36,6 +36,7 @@ class TaskDataGenerator:
             self.env = gym.make(env_name, render_mode="rgb_array")
         self.rest_variables = self.env.reset(seed=seed)
         self.init_planner(self.env, self.rest_variables)
+        return self.rest_variables
         # print(f"Initialized environment with seed {seed}")
 
     def init_planner(self, env=None, rest_variables=None):

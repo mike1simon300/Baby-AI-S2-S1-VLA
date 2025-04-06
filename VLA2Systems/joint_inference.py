@@ -91,7 +91,10 @@ class System2Inference:
     def init_env(self, env, seed=None):
         self.env = env
         self.generator = TaskDataGenerator([], env=env)
-        self.generator.reset(seed=seed)
+        self.obs, _ = self.generator.reset(seed=seed)
+
+    def get_obs(self):
+        return self.obs
 
     def __call__(self, *args, **kwds):
         if len(args) == 0 and self.dataset:
@@ -168,7 +171,7 @@ class System1Inferece:
         done = False
         while not done and step_counter < max_steps:
             done = self.step(sub_task)
-            print(done)
+        return done
 
 
     def show_frame_Jupyter(self, image):

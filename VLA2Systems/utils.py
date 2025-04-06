@@ -75,6 +75,10 @@ def parse_mission(mission):
 
 def generate_verifier(mission):
     task_type, color1, obj1, color2, obj2 = parse_mission(mission)
+    if color1 == "":
+        color1 = None
+    if color2 == "":
+        color2 = None
     # print(f"Task parsed: {task_type}, {color1}, {obj1}, {color2}, {obj2}")
     if task_type == "pick_up":
         instrs = PickupInstr(ObjDesc(obj1, color1))

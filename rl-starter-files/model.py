@@ -114,7 +114,9 @@ class ACModel(nn.Module, torch_ac.RecurrentACModel):
 
 
         if self.use_sentence_embed:
-            embedded_sentence = self.sentence_projection(torch.tensor(obs.raw_text))
+            device = next(self.sentence_projection.parameters()).device
+            embedded_sentence = torch.tensor(obs.embbed_text).to(device)
+            embedded_sentence = self.sentence_projection(embedded_sentence)
             embedding = torch.cat((embedding, embedded_sentence), dim=1)
 
         elif self.use_text:
@@ -127,10 +129,6 @@ class ACModel(nn.Module, torch_ac.RecurrentACModel):
         x = self.critic(embedding)
         value = x.squeeze(1)
 
-        # Debugging gradients right after backward pass
-        for name, param in self.named_parameters():
-            if param.grad is None:
-                print(f"Param '{name}' has no grad. Check if used correctly.")
 
         return dist, value, memory
 

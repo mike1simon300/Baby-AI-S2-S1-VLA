@@ -18,12 +18,10 @@ from gymnasium import spaces
 import numpy as np
 
 
-def make_env(env_list, seed=None, render_mode=None, text_encoder=None):
+def make_env(env_list, seed=None, render_mode=None):
     env_key = random.choice(env_list)
     env = gym.make(env_key, render_mode=render_mode)
     env.reset(seed=seed)
-    if text_encoder:
-        return CustomEnvWrapper(env, text_encoder)
 
     return env
 
@@ -180,10 +178,6 @@ if __name__ == "__main__":
 
     # Load environments
 
-    if args.sentence:
-        sentence_encoder = SentenceTransformer("all-MiniLM-L6-v2")
-    else:
-        sentence_encoder = None
 
     envs = []
     for i in range(args.procs):
@@ -191,7 +185,7 @@ if __name__ == "__main__":
             envs.append(utils.make_env(args.env, args.seed + 10000 * i))
         else:
             config = EnvSelectorConfigParser(args.env_config_file)
-            envs.append(make_env(config.easy_envs, args.seed + 10000 * i, text_encoder=sentence_encoder))
+            envs.append(make_env(config.easy_envs, args.seed + 10000 * i))
     txt_logger.info("Environments loaded\n")
 
     # Load training status
@@ -203,8 +197,13 @@ if __name__ == "__main__":
     txt_logger.info("Training status loaded\n")
 
     # Load observations preprocessor
+    if args.sentence:
+        obs_space, preprocess_obss = utils.get_obss_preprocessor_sentence(
+            envs[0].observation_space)
+    else:
+        obs_space, preprocess_obss = utils.get_obss_preprocessor(
+            envs[0].observation_space)
 
-    obs_space, preprocess_obss = utils.get_obss_preprocessor(envs[0].observation_space)
     if "vocab" in status:
         preprocess_obss.vocab.load_vocab(status["vocab"])
     txt_logger.info("Observations preprocessor loaded")

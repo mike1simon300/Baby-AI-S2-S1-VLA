@@ -60,22 +60,17 @@ def get_obss_preprocessor(obs_space):
         obs_space = {"image": obs_space.spaces["image"].shape, "text": 100}
 
         vocab = Vocabulary(obs_space["text"])
-        encoder = SentenceTransformer("all-MiniLM-L6-v2")
         def preprocess_obss(obss, device=None):
             images = preprocess_images([obs["image"] for obs in obss], device=device)
             text_tensor = preprocess_texts([obs["mission"] for obs in obss], vocab, device=device)
             raw_text = numpy.array([obs["mission"] for obs in obss], dtype=object)  # <-- FIX HERE
-            with torch.no_grad():
-                embbed_text = encoder.encode(raw_text, show_progress_bar=False)
             return torch_ac.DictList({
                 "image": images,
                 "text": text_tensor,
-                "embbed_text": embbed_text,
                 "raw_text": raw_text
             })
 
         preprocess_obss.vocab = vocab
-        preprocess_obss.encoder = encoder
 
     else:
         raise ValueError("Unknown observation space: " + str(obs_space))

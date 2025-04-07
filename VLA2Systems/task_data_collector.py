@@ -2,7 +2,7 @@ import os
 import random
 import yaml
 import shutil
-from datasets import Dataset, DatasetDict
+from datasets import Dataset, load_from_disk, concatenate_datasets
 from VLA2Systems.task_data_generator import TaskDataGenerator
 from tqdm import tqdm  # For progress bar
 import contextlib
@@ -25,6 +25,11 @@ class DataCollectorConfigParser:
         self.easy_samples = config.get("samples", {}).get("easy", 100)
         self.intermediate_samples = config.get("samples", {}).get("intermediate", 100)
         self.hard_samples = config.get("samples", {}).get("hard", 100)
+        self.concatinate = config.get("samples", {}).get("concatinate", True)
+        self.mix_sample = config.get("samples", {}).get("mix_sample", False)
+        self.mix_sample_size = config.get("samples", {}).get("mix_sample_size", 100)
+        self.contribution_percentages = config.get("samples", {}).get("contribution_percentages", [])
+
         
         # Input text configuration
         self.include_grid = config.get("input_text", {}).get("include_grid", False)
@@ -34,6 +39,12 @@ class DataCollectorConfigParser:
         self.include_robot_current_room = config.get("input_text", {}).get("include_robot_current_room", False)
         self.plan_prompt = config.get("input_text", {}).get("plan_prompt", "default")
 
+        # Output text configuration
+        self.include_reason = config.get("output_text", {}).get("include_reason", False)
+        self.include_backward_reasoning = config.get("output_text", {}).get("include_backward_reasoning", False)
+        self.include_locations = config.get("output_text", {}).get("include_locations", False)
+        self.repeat_first_action = config.get("output_text", {}).get("repeat_first_action", False)
+        
 
 class DataCollector:
     def __init__(self, config_path):
@@ -91,7 +102,12 @@ class DataCollector:
                             include_robot_current_room=self.config.include_robot_current_room,
                             plan_prompt=self.config.plan_prompt
                         )
-                        output_text = self.generator.get_output_text()
+                        output_text = self.generator.get_output_text(
+                            include_locations=self.config.include_locations,
+                            include_reason=self.config.include_reason,
+                            include_backward_reason=self.config.include_backward_reasoning,
+                            repeat_first_action=self.config.repeat_first_action
+                        )
                         
                         # Append to dataset
                         self.datasets[difficulty].append({"input": input_text, "output": output_text})
@@ -112,6 +128,45 @@ class DataCollector:
                         tqdm.write(f"[WARNING] Planning failed for {env_name} with seed {seed}. Retrying...")
         
         print("Data collection completed!")
+        if selected_difficulty and (self.config.concatinate or self.config.mix_sample):
+
+            # Define dataset paths
+            dataset_paths = {
+                "easy": f"./datasets/{self.dataset_name}/easy",
+                "intermediate": f"./datasets/{self.dataset_name}/intermediate",
+                "hard": f"./datasets/{self.dataset_name}/hard"
+            }
+
+        # Load datasets
+        datasets = {key: load_from_disk(path) for key, path in dataset_paths.items()}
+        if self.config.concatinate:
+            # Concatenate datasets
+            mixed_dataset = concatenate_datasets([datasets["easy"], datasets["intermediate"], datasets["hard"]])
+        elif self.config.mix_sample:
+            contribution_percentages = {
+                "easy": self.config.contribution_percentages[0],
+                "intermediate": self.config.contribution_percentages[1],
+                "hard": self.config.contribution_percentages[2]
+            }
+
+            # Calculate samples per dataset
+            sample_sizes = {key: int(self.config.mix_sample_size * percentage) for key, percentage in contribution_percentages.items()}
+            # Sample and merge datasets
+            mixed_data = []
+            for key, dataset in datasets.items():
+                sampled_data = dataset.shuffle(seed=42).select(range(sample_sizes[key]))  # Random sampling
+                mixed_data.extend(sampled_data)
+
+            # Convert to Hugging Face Dataset
+            mixed_dataset = Dataset.from_list(mixed_data)
+
+        # Shuffle the final dataset
+        mixed_dataset = mixed_dataset.shuffle(seed=42)
+
+        # Save the mixed dataset (optional)
+        mixed_dataset.save_to_disk(f"./datasets/{self.dataset_name}/mixed")
+
+        print("Final dataset size:", len(mixed_dataset))
 
     def save_dataset(self, difficulty):
         dataset_name = f"./datasets/{self.dataset_name}/{difficulty}"

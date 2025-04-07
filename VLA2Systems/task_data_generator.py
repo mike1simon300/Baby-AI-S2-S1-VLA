@@ -8,7 +8,7 @@ from VLA2Systems.task_planning import RobotPlanner
 import imageio
 
 class TaskDataGenerator:
-    def __init__(self, env_options, seed=None, env=None):
+    def __init__(self, env_options, seed=None, env=None, verbose=0):
         """
         Initialize the data generator.
         :param env_options: Either a list of environment names or a dictionary categorized by difficulty.
@@ -22,6 +22,7 @@ class TaskDataGenerator:
         self.planner = None
         self.plan = None
         self.from_env = False
+        self.verbose = verbose
         if env is not None:
             self.from_env = True
             self.env = env
@@ -62,7 +63,7 @@ class TaskDataGenerator:
             self.knowledge_base,
             start_location=self.start_location,
             holding=self.holding,
-            verbose=0
+            verbose=self.verbose
         )
         self.mission = self.rest_variables[0]["mission"]
 
@@ -141,7 +142,56 @@ class TaskDataGenerator:
             return False
         self.plan = plan
         return plan
+
+    def generate_backward_logic(self, plan):
+        """
+        Generates a backward reasoning paragraph based on the provided plan.
         
+        Each plan entry is a tuple:
+        (action, object_type, color, position, room_id, reason_msg)
+        
+        The reasoning starts from the goal (the last step) and works backward,
+        connecting the steps with phrases like "but" and ending with the robot's current room.
+        
+        Parameters:
+        plan (list of tuples): The task plan from start to finish.
+        robot_current_room (int): The current room of the robot.
+        
+        Returns:
+        str: The backward reasoning paragraph.
+        """
+        if not plan:
+            return ""
+        robot_current_room = self.planner.get_current_room(self.start_location)
+        # doors = generator.knowledge_base.KB['connections']
+        # Start from the goal: the last step's reason message
+        
+        backward_text = plan[-1][-1].strip()
+        
+        # If there are prior steps, add them in reverse order
+        if len(plan) > 1:
+            # Reverse the plan excluding the last (goal) step.
+            backward_text = "Perform these steps to " + backward_text
+            reversed_steps = plan[:-1][::-1]
+            
+            # If more than one step, join them with commas and add a "but" before the last one.
+            if len(reversed_steps) == 1:
+                backward_text += ", " + reversed_steps[0][-1].strip()
+            else:
+                for i, step in enumerate(reversed_steps):
+                    # Insert a connector: for the first step in the reverse order, just a comma
+                    if i == 0:
+                        backward_text += ", " + step[-1].strip()
+                    # For the last one in the reversed sequence, use "but" to emphasize the need to satisfy this condition
+                    elif i == len(reversed_steps) - 1:
+                        backward_text += ", but " + step[-1].strip()
+                    else:
+                        backward_text += ", " + step[-1].strip()
+        
+        # Append an ending phrase indicating the robot's current location.
+        backward_text += f", which is where the robot is currently in room {robot_current_room}."
+        return backward_text
+    
     def visualize(self):
         fig, ax = plt.subplots()
         render_env(self.env, ax, 2)
@@ -151,25 +201,73 @@ class TaskDataGenerator:
         frame = self.env.render()
         imageio.imwrite(filename, frame)
 
-    def plan2text(self, include_kb=False, plan=None, print_plan=False, 
-                  include_mission=False, include_robot_location=False,
-                  include_all=False):
+    # def plan2text(self, include_kb=False, plan=None, print_plan=False, 
+    #               include_mission=False, include_robot_location=False,
+    #               include_all=False, include_locations=False, 
+    #               include_reason=False, include_backward_reason=False):
+    #     if plan is None:
+    #         plan = self.plan
+    #     if plan is None:
+    #         raise Exception("Plan is not there")
+    #     text = ""
+    #     if include_kb or include_all:
+    #         text += "Knowledge Base:\n" + str(self.knowledge_base)
+    #     if include_robot_location or include_all:
+    #         text += "\nRobot location: " + str(self.start_position)
+    #     if include_mission or include_all:
+    #         text += "\nMission: " + self.mission
+    #     plan_text = str(self.planner.__str__(plan))
+    #     text += "\nPlan is: \n" + plan_text
+    #     if print_plan:
+    #         print(text)
+    #     return text
+
+    def plan2text(self, plan=None, include_locations=False, 
+                  include_reason=False, include_step=True):
         if plan is None:
             plan = self.plan
-        if plan is None:
-            raise Exception("Plan is not there")
-        text = ""
-        if include_kb or include_all:
-            text += "Knowledge Base:\n" + str(self.knowledge_base)
-        if include_robot_location or include_all:
-            text += "\nRobot location: " + str(self.start_position)
-        if include_mission or include_all:
-            text += "\nMission: " + self.mission
-        plan_text = str(self.planner.__str__(plan))
-        text += "\nPlan is: \n" + plan_text
-        if print_plan:
-            print(text)
-        return text
+        steps = []
+        for i, action in enumerate(plan, start=1):
+            if not action:  # Skip if the action is empty
+                continue
+
+            action_type = action[0]
+            color = action[2]
+            if color == "":
+                color = random.choice(["a","the"])
+            loc = ""
+            if include_locations and action_type != 'drop_next_to' and \
+                len(action) > 3 and action[3] is not None:
+                loc = action[3]
+            elif include_locations and action_type == 'drop_next_to' and \
+                len(action) > 5 and action[5] is not None:
+                loc = action[5]
+            
+            loc = f' at {loc}' if loc != "" else loc
+            reason = ""
+            step = ""
+            if include_step:
+                step = f"Step {i}: "
+            if include_reason:
+                reason = f". Reason is: {action[-1]}"
+            if action_type == 'go_to' and len(action) > 2:
+                steps.append(f"{step}Go to {color} {action[1]}{loc}{reason}")
+            elif action_type == 'pick_up' and len(action) > 2:
+                steps.append(f"{step}Pick up {color} {action[1]}{loc}{reason}")
+            elif action_type == 'open' and len(action) > 0:
+                steps.append(f"{step}Open {color} {action[1]}{loc}{reason}")
+            elif action_type == 'drop_next_to' and len(action) > 0:
+                color2 = action[4]
+                if color2 == "":
+                    color = random.choice(["a","the"])
+                steps.append(
+                    f"{step}Drop {color} {action[1]} "+
+                    f"next to {color2} {action[3]}{loc}{reason}")
+            else:
+                steps.append(f"{step}Invalid action {action}")
+
+        return "\n".join(steps)
+
 
     def get_input_text(self, include_grid=False, include_kb=True, include_mission=True, 
                        include_robot_location=True, include_robot_current_room=False, 
@@ -183,7 +281,7 @@ class TaskDataGenerator:
         if include_robot_location or include_all:
             text += "\nRobot location: " + str(self.start_position)
         if include_robot_current_room or include_all:
-            text += ", which is in Room " + str(self.planner.current_room(self.start_location))
+            text += ", which is in Room " + str(self.planner.get_current_room(self.start_location))
         if include_mission or include_all:
             text += "\nMission: " + self.mission
         if plan_prompt == "default":
@@ -192,11 +290,29 @@ class TaskDataGenerator:
             text += plan_prompt
         return text
 
-    def get_output_text(self, plan=None):
-        text = ""
+    def get_output_text(self, plan=None, include_locations=False, 
+                        include_reason=False, include_backward_reason=False, 
+                        repeat_first_action=False, include_all=False):
+        plan_text = ""
         if plan is None:
             plan = self.plan
         if plan is None:
             raise Exception("Plan is not there")
-        plan_text = str(self.planner.__str__(plan))
+        if include_all:
+            include_locations=True
+            include_reason=True
+            include_backward_reason=True
+            repeat_first_action = True
+        if include_backward_reason:
+            plan_text += "Reasoning Stage: \n" +\
+                  self.generate_backward_logic(plan) +\
+                    "\nEnd of Reasoning Stage\nExecution Stage:\n"
+        plan_text += self.plan2text(plan, include_locations, include_reason)
+        if repeat_first_action:
+            first_action = "\nSo the task the robot should do now is: \n" +\
+                self.plan2text(plan, include_locations, include_reason, 
+                               include_step=False).split('\n')[0]
+            if include_reason:
+                first_action = first_action.split('Reason')[0]
+            plan_text += first_action
         return plan_text

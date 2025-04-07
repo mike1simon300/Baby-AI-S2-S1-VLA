@@ -136,10 +136,11 @@ def format_knowledge_base(knowledge_base):
                 if obj['type'] == 'door':
                     text_output.append(
                         f"  {obj['color']} {obj['type']} is at {obj['position']}"+
-                        f" and is currently {obj['state']}")
+                        f" in Room {room_id} and is currently {obj['state']}")
                 else:
                     text_output.append(
-                        f"  {obj['color']} {obj['type']} is at {obj['position']}")
+                        f"  {obj['color']} {obj['type']} is at {obj['position']}"+
+                        f" in Room {room_id}")
     if len(knowledge_base["connections"]) == 0:
         text_output.append("There is no Connections.")
     else:

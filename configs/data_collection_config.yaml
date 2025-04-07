@@ -1,18 +1,29 @@
-dataset_name: "robot_LLM_grid_dataset_30k"
+dataset_name: "robot_LLM_reason_dataset_30k"
 
 samples:
   easy: 10000
   intermediate: 10000
   hard: 10000
+  concatinate: true
+  mix_sample: false
+  # The rest of samples param are only valid if mix sample is true and concatinate is false
+  mix_sample_size: 10000  # Should be smaller or equal to the smallest difficulty dataset
+  # correspond to easy, intermidiate, hard
+  contribution_percentages: [0.2, 0.4, 0.4]  # Should add up to one
 
 input_text:
-  include_grid: true
+  include_grid: false
   include_kb: true
   include_mission: true
   include_robot_location: true
   include_robot_current_room: true
   plan_prompt: "default"
 
+output_text:
+  include_reason: false
+  include_backward_reasoning: true
+  include_locations: true
+  repeat_first_action: true
 
 environments:
   easy:

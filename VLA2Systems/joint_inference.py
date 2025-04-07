@@ -1,5 +1,3 @@
-
-
 import os
 import yaml
 import torch
@@ -13,7 +11,8 @@ from IPython.display import display, clear_output
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from VLA2Systems.task_data_generator import TaskDataGenerator
 import VLA2Systems.rl_utils as utils
-from VLA2Systems.utils import generate_verifier
+from VLA2Systems.utils import generate_verifier, render_env
+import gymnasium as gym
 
 
 class JointInferenceConfigParser:
@@ -36,11 +35,11 @@ class JointInferenceConfigParser:
         self.pause = self.system1.get("pause", 0.05)
         self.text = self.system1.get("text", True)
         self.memory = self.system1.get("memory", False)
-        self.visulize = self.system1.get("visulize", True)
+        self.visualize = self.system1.get("visualize", True)
         self.verify = self.system1.get("verify", True)
 
 class System2Inference:
-    def __init__(self, config_path, env=None):
+    def __init__(self, config_path, env=None, seed=None):
         self.config = JointInferenceConfigParser(config_path)
         
         if not os.path.exists(self.config.model_path):
@@ -65,7 +64,7 @@ class System2Inference:
         self.env = env
         self.generator = None
         if env is not None:
-            self.init_env(env)
+            self.init_env(env, seed=seed)
             
 
     def generate_text(self, prompt, max_length=4096):
@@ -88,6 +87,7 @@ class System2Inference:
         self.env = env
         self.generator.init_planner(self.env, self.generator.rest_variables)
 
+
     def init_env(self, env, seed=None):
         self.env = env
         self.generator = TaskDataGenerator([], env=env)
@@ -96,12 +96,7 @@ class System2Inference:
     def get_obs(self):
         return self.obs
 
-    def __call__(self, *args, **kwds):
-        if len(args) == 0 and self.dataset:
-            index = random.randint(0, len(self.dataset)-1)
-            example = self.dataset[index]
-            prompt = example["input"]
-            return self.generate_text(prompt)
+    def __call__(self, *args, reset=False, seed=None, **kwds):
         if len(args) == 0 and self.dataset:
             index = random.randint(0, len(self.dataset)-1)
             example = self.dataset[index]
@@ -115,18 +110,30 @@ class System2Inference:
             prompt = example["input"]
             return self.generate_text(prompt)
         elif len(args)>0 and isinstance(args[0], Env):
-            self.update_env(args[0])
+            if reset:
+                self.update_env(args[0], seed=seed)  # Only reset if explicitly requested!
             prompt = self.generator.get_input_text(include_all=True)
-            # print(" THE INPUT IS: \n", prompt, " \n END OF INPUT")
             output = self.generate_text(prompt)
-            # print(" THE OUTPUT IS: \n", output, " \n END OF OUTPUT")
             return output
 
-    def get_input(self, env):
-        self.update_env(env)
+
+    def get_input(self, env, reset=False, seed=None):
+        if reset:
+            self.update_env(env, seed=seed)
         prompt = self.generator.get_input_text(include_all=True)
         appended_prompt = f"### Instruction:\n{prompt}\n\n### Response:\n"
         return appended_prompt
+    
+    def get_planner_output(self, env, reset=False, seed=None):
+        if reset:
+            self.update_env(env, seed=seed)
+        plan = self.generator.generate_plan()
+        if plan:
+            output = self.generator.get_output_text(plan)
+        else:
+            output = None
+
+        return output
     
 class System1Inferece:
     def __init__(self, config_path, env):
@@ -152,7 +159,7 @@ class System1Inferece:
         self.obs = obs
         done = terminated | truncated
         self.agent.analyze_feedback(reward, done)
-        if self.config.visulize:
+        if self.config.visualize:
             image = self.env.render()
             self.show_frame_Jupyter(image)
             print(sub_task)
@@ -171,6 +178,9 @@ class System1Inferece:
         done = False
         while not done and step_counter < max_steps:
             done = self.step(sub_task)
+            #print(step_counter, done)
+            step_counter += 1
+
         return done
 
 
@@ -190,6 +200,7 @@ class System1Inferece:
             env = self.env
         if self.config.verify:
             self.instrs = generate_verifier(sub_task)
+            print(self.instrs)
             if not self.instrs:
                 self.instrs = None
                 return None
@@ -215,3 +226,103 @@ class System1Inferece:
             terminated = True
             reward = 0
         return terminated, reward
+
+import re
+
+class JointInference:
+    def __init__(self, config_path, env_name, seed=None):
+        self.env_name = env_name
+        self.seed = seed or random.randint(1, 1000)
+        self.env = gym.make(self.env_name, render_mode="rgb_array")
+        
+        self.S2Model = System2Inference(config_path, env=self.env, seed=self.seed)
+        self.S1Model = System1Inferece(config_path, env=self.env)
+
+        self.prompt = ""
+        self.output = ""
+        self.response = ""
+        
+        self.reset(self.seed)
+
+    def reset(self, seed=None):
+        self.seed = seed or random.randint(1, 1000)
+        obs, _ = self.env.reset(seed=self.seed)
+
+        # Ensure both models reference the same environment
+        self.S2Model.update_env(self.env)
+        self.S1Model.obs = self.S2Model.get_obs()
+
+    def visualize(self):
+        image = self.env.render()
+        plt.imshow(image)
+        plt.axis("off")  # Hide axes
+        display(plt.gcf())  # Show figure
+
+    def run_S2(self, reset=False, seed=None):
+        self.prompt = self.S2Model.get_input(self.env, reset=reset, seed=seed)
+        #print(self.prompt)
+        self.output = self.S2Model(self.env, reset=reset, seed=seed)
+    
+        self.response = self.extract_response(self.output)
+                
+        return self.response
+    
+    def run_S1(self, sub_step, max_steps=100):
+        """
+        Initialize the sub-task for System1 using the provided sub_step,
+        then run System1 until the sub-task is completed or max_steps is reached.
+        Returns a boolean indicating whether the sub-task was completed.
+        """
+        self.init_S1_sub_task(sub_step)
+        done = self.S1Model.step_untill(sub_step, max_steps=max_steps)
+        return done
+    
+    def run(self, sub_step, max_sub_steps=100):
+        response = self.run_S2()
+    
+    @staticmethod
+    def extract_response(generated_text: str) -> str:
+        delimiter = "### Response:"
+        idx = generated_text.find(delimiter)
+        if idx != -1:
+            # Return the text after the delimiter, stripping whitespace.
+            return generated_text[idx + len(delimiter):].strip()
+        else:
+            # If the delimiter is not found, return the whole text.
+            return generated_text.strip()
+
+    def extract_sub_steps(self, response: str):
+        # Improved robust regex extraction assuming numbered steps:
+        steps = re.findall(r"(?:\d+\.\s*)(.+)", response)
+        return [step.strip() for step in steps if step.strip()]
+    
+    def init_S1_sub_task(self, sub_task):
+        self.S1Model.init_sub_task(sub_task, self.env)
+
+
+    def step_S1(self, sub_steps, visualize=True, max_steps_per_subtask=50):
+        for sub_step in sub_steps:
+            print(f"\nSystem1 starting sub-step: {sub_step}")
+            
+            done = self.S1Model.step_untill(sub_step, max_steps=max_steps_per_subtask)
+            
+            if visualize:
+                self.visualize()
+
+            if done:
+                print(f"✅ Completed: {sub_step}")
+            else:
+                print(f"⚠️ Failed or timeout: {sub_step}")
+                break  # Usually you stop or re-plan if a step fails
+
+    def print_prompt(self):
+        print(self.prompt)
+
+    def print_output(self):
+        print(self.output)
+
+    def print_response(self):
+        print(self.response)
+    
+    def print_mission(self):
+        print(self.S2Model.generator.mission)

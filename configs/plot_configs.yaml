@@ -1,0 +1,28 @@
+# Required settings
+log_dir1: "./rl-starter-files/storage/LateFusionRedBlueBall_2"
+tags:
+  - num_frames_mean
+label1: "Early Fusion"
+output: "early_vs_late_fusion.pdf"
+
+# Optional second log directory and label
+log_dir2: "./rl-starter-files/storage/LateFusionRedBlueBall_3"
+label2: "Late Fusion"
+
+# Optional additional plotting options
+max_x: 1000             # Maximum number of data points to plot per tag (optional)
+exponent: 6             # Scale x-axis by dividing steps by 10^6 (optional)
+x_label: "Number of Training Frames"   # Custom x-axis label (optional)
+y_label: "Average Number of Steps"       # Custom y-axis label (optional)
+
+plot_title: "Early vs. Late Fusion"
+axis_fontsize: 14      # Font size for x and y axis labels and tick labels
+legend_fontsize: 14    # Font size for the legend
+title_fontsize: 20     # Font size for the overall title
+
+# New options for professional aesthetics
+line_style1: "-"       # Line style for first log curve (e.g., solid line)
+line_style2: "-"      # Line style for second log curve (e.g., dashed line)
+grid_line_style: "--"  # Grid line style (e.g., dashed lines)
+grid_line_width: 0.5   # Grid line width
+font_family: "serif"   # Font family to use (e.g., "Times New Roman" or "serif")
